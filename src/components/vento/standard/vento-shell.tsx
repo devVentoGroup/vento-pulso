@@ -22,23 +22,24 @@ export async function VentoShell({ children }: { children: React.ReactNode }) {
   try {
     const supabase = await createClient();
     const { data: userRes } = await supabase.auth.getUser();
-    user = userRes.user ?? null;
+    const authUser = userRes.user ?? null;
+    user = authUser ? { email: authUser.email ?? null } : null;
 
-    if (user) {
+    if (authUser) {
       const { data: employeeRow } = await supabase
         .from("employees")
         .select("role,full_name,alias,site_id")
-        .eq("id", user.id)
+        .eq("id", authUser.id)
         .single();
 
       role = employeeRow?.role ?? null;
       displayName =
-        employeeRow?.alias ?? employeeRow?.full_name ?? user.email ?? "Usuario";
+        employeeRow?.alias ?? employeeRow?.full_name ?? authUser.email ?? "Usuario";
 
       const { data: employeeSites } = await supabase
         .from("employee_sites")
         .select("site_id,is_primary")
-        .eq("employee_id", user.id)
+        .eq("employee_id", authUser.id)
         .eq("is_active", true)
         .order("is_primary", { ascending: false })
         .limit(50);

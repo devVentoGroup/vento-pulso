@@ -1,4 +1,5 @@
-﻿import { Manrope } from "next/font/google";
+import { Manrope } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { VentoShell } from "@/components/vento/standard/vento-shell";
 
@@ -17,7 +18,9 @@ export default function RootLayout({
   return (
     <html lang="es" className={manrope.variable}>
       <body className="min-h-screen bg-[var(--ui-bg)] text-[var(--ui-text)] antialiased">
-        <VentoShell>{children}</VentoShell>
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-[var(--ui-muted)]">Cargando…</div>}>
+          <VentoShell>{children}</VentoShell>
+        </Suspense>
       </body>
     </html>
   );
