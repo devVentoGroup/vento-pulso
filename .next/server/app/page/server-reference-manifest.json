@@ -1,0 +1,35 @@
+{
+  "node": {
+    "408093cec055993d27ccf31b16553a83b925d68f64": {
+      "workers": {
+        "app/page": {
+          "moduleId": 99541,
+          "async": false,
+          "exportedName": "validateRedemption",
+          "filename": "src/modules/pos/api/redemption.api.ts"
+        }
+      },
+      "layer": {
+        "app/page": "action-browser"
+      },
+      "exportedName": "validateRedemption",
+      "filename": "src/modules/pos/api/redemption.api.ts"
+    },
+    "606344c6f1116c1de062d21a4b4bdf4d2412f5c316": {
+      "workers": {
+        "app/page": {
+          "moduleId": 99541,
+          "async": false,
+          "exportedName": "processRedemptionAction",
+          "filename": "src/modules/pos/actions/validate-redemption.action.ts"
+        }
+      },
+      "layer": {
+        "app/page": "action-browser"
+      },
+      "exportedName": "processRedemptionAction",
+      "filename": "src/modules/pos/actions/validate-redemption.action.ts"
+    }
+  },
+  "edge": {}
+}
