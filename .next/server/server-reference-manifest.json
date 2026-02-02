@@ -7,10 +7,17 @@
           "async": false,
           "exportedName": "validateRedemption",
           "filename": "src/modules/pos/api/redemption.api.ts"
+        },
+        "app/scanner/page": {
+          "moduleId": 58005,
+          "async": false,
+          "exportedName": "validateRedemption",
+          "filename": "src/modules/pos/api/redemption.api.ts"
         }
       },
       "layer": {
-        "app/page": "action-browser"
+        "app/page": "action-browser",
+        "app/scanner/page": "action-browser"
       },
       "filename": "src/modules/pos/api/redemption.api.ts",
       "exportedName": "validateRedemption"
@@ -22,10 +29,17 @@
           "async": false,
           "exportedName": "processRedemptionAction",
           "filename": "src/modules/pos/actions/validate-redemption.action.ts"
+        },
+        "app/scanner/page": {
+          "moduleId": 58005,
+          "async": false,
+          "exportedName": "processRedemptionAction",
+          "filename": "src/modules/pos/actions/validate-redemption.action.ts"
         }
       },
       "layer": {
-        "app/page": "action-browser"
+        "app/page": "action-browser",
+        "app/scanner/page": "action-browser"
       },
       "filename": "src/modules/pos/actions/validate-redemption.action.ts",
       "exportedName": "processRedemptionAction"
