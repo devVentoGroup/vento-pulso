@@ -38,38 +38,8 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
   const runningRef = useRef(false);
 
   const [error, setError] = useState<string | null>(null);
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [deviceId, setDeviceId] = useState<string>("");
   const [scanning, setScanning] = useState(false);
   const [starting, setStarting] = useState(false);
-
-  useEffect(() => {
-    if (!active) return;
-
-    const loadDevices = async () => {
-      try {
-        const all = await navigator.mediaDevices.enumerateDevices();
-        const videos = all.filter((d) => d.kind === "videoinput");
-        setDevices(videos);
-        if (!deviceId && videos[0]?.deviceId) {
-          setDeviceId(videos[0].deviceId);
-        }
-      } catch {
-        // no-op
-      }
-    };
-
-    const onDeviceChange = () => {
-      void loadDevices();
-    };
-
-    void loadDevices();
-    navigator.mediaDevices?.addEventListener?.("devicechange", onDeviceChange);
-
-    return () => {
-      navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
-    };
-  }, [active, deviceId]);
 
   useEffect(() => {
     if (!active) return;
@@ -108,7 +78,7 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
     void startStream();
     return () => stopStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, deviceId]);
+  }, [active]);
 
   const clearTimer = () => {
     if (timerRef.current) {
@@ -167,6 +137,16 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
   const detectFrame = async () => {
     if (!detectorRef.current) return null;
 
+    if (videoRef.current && videoRef.current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      try {
+        const fromVideo = await detectorRef.current.detect(videoRef.current);
+        const directValue = fromVideo[0]?.rawValue?.trim() ?? null;
+        if (directValue) return directValue;
+      } catch {
+        // continue with other strategies
+      }
+    }
+
     if (imageCaptureRef.current) {
       try {
         const bitmap = await imageCaptureRef.current.grabFrame();
@@ -216,9 +196,7 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
       }
 
       const preferredConstraints: MediaStreamConstraints = {
-        video: deviceId
-          ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-          : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       };
 
@@ -283,20 +261,6 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
           Reiniciar
         </button>
       </div>
-
-      {devices.length > 1 ? (
-        <select
-          className="ui-input mb-2 h-11"
-          value={deviceId}
-          onChange={(e) => setDeviceId(e.target.value)}
-        >
-          {devices.map((d, idx) => (
-            <option key={d.deviceId} value={d.deviceId}>
-              {d.label || `Camara ${idx + 1}`}
-            </option>
-          ))}
-        </select>
-      ) : null}
 
       <div className="overflow-hidden rounded-lg border border-[var(--ui-border)] bg-black">
         <video ref={videoRef} className="h-[280px] w-full object-cover" muted playsInline />
