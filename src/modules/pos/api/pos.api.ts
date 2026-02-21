@@ -10,7 +10,7 @@ export type ClientRow = {
 export async function getClientById(clientId: string): Promise<ClientRow | null> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from("customers")
+    .from("users")
     .select("id,full_name,email,loyalty_points")
     .eq("id", clientId)
     .single();

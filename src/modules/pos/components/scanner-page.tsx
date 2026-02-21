@@ -1,19 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { QRScanner } from "@/modules/pos/components/qr-scanner";
 import type { QRScanResult } from "@/modules/pos/types";
 
-export function ScannerPage() {
+type ScannerPageProps = {
+  siteId: string;
+};
+
+export function ScannerPage({ siteId }: ScannerPageProps) {
   const [selectedClient, setSelectedClient] = useState<QRScanResult | null>(null);
+
+  const statusText = useMemo(() => {
+    if (!selectedClient) return "Esperando escaneo. Pega el QR o usa la camara.";
+    return `Cliente listo para operacion: ${selectedClient.full_name || "Sin nombre"}`;
+  }, [selectedClient]);
 
   return (
     <div className="w-full">
       <div className="ui-panel">
         <h1 className="ui-h1">Pulso</h1>
         <p className="mt-2 ui-body-muted">
-          Escanea clientes o canjes para puntos.
+          Escanea identificacion y redenciones alineado con Vento Pass.
         </p>
       </div>
 
@@ -22,6 +31,7 @@ export function ScannerPage() {
           selectedClient={selectedClient}
           onScan={(result) => setSelectedClient(result)}
           onClear={() => setSelectedClient(null)}
+          siteId={siteId}
         />
 
         <div className="ui-panel">
@@ -35,9 +45,7 @@ export function ScannerPage() {
               </div>
             </div>
           ) : (
-            <div className="mt-3 ui-body-muted">
-              Esperando escaneo. Pega el QR o usa la camara.
-            </div>
+            <div className="mt-3 ui-body-muted">{statusText}</div>
           )}
         </div>
       </div>

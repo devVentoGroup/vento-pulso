@@ -1,5 +1,21 @@
 "use server";
+
 import { createClient } from "@/lib/supabase/server";
+
+type LoyaltyRewardRef = {
+  name?: string | null;
+};
+
+type RedemptionRow = {
+  id: string;
+  user_id: string;
+  reward_id: string;
+  points_spent: number;
+  status: string;
+  created_at: string;
+  loyalty_rewards?: LoyaltyRewardRef | LoyaltyRewardRef[] | null;
+};
+
 export interface RedemptionValidationResult {
   success: boolean;
   redemption?: {
@@ -13,12 +29,14 @@ export interface RedemptionValidationResult {
   };
   error?: string;
 }
+
 export async function validateRedemption(
   qrCode: string
 ): Promise<RedemptionValidationResult> {
   try {
     const supabase = await createClient();
     const cleanQrCode = qrCode.trim();
+
     const { data: redemption, error: redemptionError } = await supabase
       .from("loyalty_redemptions")
       .select(
@@ -35,13 +53,15 @@ export async function validateRedemption(
       `
       )
       .eq("qr_code", cleanQrCode)
-      .single();
+      .single<RedemptionRow>();
+
     if (redemptionError || !redemption) {
       return {
         success: false,
         error: redemptionError?.message || "Codigo QR no encontrado",
       };
     }
+
     if (redemption.status !== "pending") {
       return {
         success: false,
@@ -53,13 +73,18 @@ export async function validateRedemption(
               : "Este codigo no esta disponible",
       };
     }
+
+    const rewardData = Array.isArray(redemption.loyalty_rewards)
+      ? redemption.loyalty_rewards[0]
+      : redemption.loyalty_rewards;
+
     return {
       success: true,
       redemption: {
         id: redemption.id,
         user_id: redemption.user_id,
         reward_id: redemption.reward_id,
-        reward_name: (redemption.loyalty_rewards as any)?.name || "Producto",
+        reward_name: rewardData?.name || "Producto",
         points_spent: redemption.points_spent,
         status: redemption.status,
         created_at: redemption.created_at,
@@ -73,6 +98,7 @@ export async function validateRedemption(
     };
   }
 }
+
 export async function markRedemptionAsUsed(
   redemptionId: string,
   orderId?: string
@@ -83,24 +109,39 @@ export async function markRedemptionAsUsed(
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
+
     if (userError || !user) {
       return { success: false, error: "No se pudo autenticar" };
     }
-    const { error: updateError } = await supabase
+
+    const validatedAt = new Date().toISOString();
+
+    const { data, error: updateError } = await supabase
       .from("loyalty_redemptions")
       .update({
         status: "validated",
-        validated_at: new Date().toISOString(),
+        validated_at: validatedAt,
         order_id: orderId || null,
       })
-      .eq("id", redemptionId);
+      .eq("id", redemptionId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+
     if (updateError) {
-      return { success: false, error: "Error al procesar la redencion" };
+      return { success: false, error: updateError.message || "Error al procesar la redencion" };
     }
+
+    if (!data) {
+      return {
+        success: false,
+        error: "Este codigo ya fue utilizado o no esta disponible",
+      };
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Error inesperado:", error);
     return { success: false, error: "Error inesperado" };
   }
 }
-
