@@ -1,0 +1,72 @@
+{
+  "node": {
+    "403712d74bd1bc7c1ab56badb1257bb2b90d26a549": {
+      "workers": {
+        "app/page": {
+          "moduleId": 29093,
+          "async": false,
+          "exportedName": "validateRedemption",
+          "filename": "src/modules/pos/api/redemption.api.ts"
+        },
+        "app/scanner/page": {
+          "moduleId": 39799,
+          "async": false,
+          "exportedName": "validateRedemption",
+          "filename": "src/modules/pos/api/redemption.api.ts"
+        }
+      },
+      "layer": {
+        "app/page": "action-browser",
+        "app/scanner/page": "action-browser"
+      },
+      "filename": "src/modules/pos/api/redemption.api.ts",
+      "exportedName": "validateRedemption"
+    },
+    "608a4f13b5e17640bcb9e2f44c7cdac2e9123baef1": {
+      "workers": {
+        "app/page": {
+          "moduleId": 29093,
+          "async": false,
+          "exportedName": "processRedemptionAction",
+          "filename": "src/modules/pos/actions/validate-redemption.action.ts"
+        },
+        "app/scanner/page": {
+          "moduleId": 39799,
+          "async": false,
+          "exportedName": "processRedemptionAction",
+          "filename": "src/modules/pos/actions/validate-redemption.action.ts"
+        }
+      },
+      "layer": {
+        "app/page": "action-browser",
+        "app/scanner/page": "action-browser"
+      },
+      "filename": "src/modules/pos/actions/validate-redemption.action.ts",
+      "exportedName": "processRedemptionAction"
+    },
+    "4063aa0e7188cc125c200c073ddc0f788077693c41": {
+      "workers": {
+        "app/page": {
+          "moduleId": 29093,
+          "async": false,
+          "exportedName": "awardLoyaltyPointsAction",
+          "filename": "src/modules/pos/actions/award-loyalty.action.ts"
+        },
+        "app/scanner/page": {
+          "moduleId": 39799,
+          "async": false,
+          "exportedName": "awardLoyaltyPointsAction",
+          "filename": "src/modules/pos/actions/award-loyalty.action.ts"
+        }
+      },
+      "layer": {
+        "app/page": "action-browser",
+        "app/scanner/page": "action-browser"
+      },
+      "filename": "src/modules/pos/actions/award-loyalty.action.ts",
+      "exportedName": "awardLoyaltyPointsAction"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "DRIm8pFcPkdD993xBgiKsvM13XCtFygBQdxNG4D3XuI="
+}

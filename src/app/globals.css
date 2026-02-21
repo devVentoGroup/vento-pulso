@@ -607,6 +607,27 @@ body {
   background-color: rgba(107, 114, 128, 0.45);
 }
 
+@media (max-width: 639.98px) {
+  .ui-app-launcher-header {
+    padding: 14px;
+  }
+
+  .ui-app-launcher-grid {
+    gap: 8px;
+  }
+
+  .ui-app-tile {
+    min-height: 96px;
+    padding: 10px;
+  }
+}
+
+@media (min-width: 768px) {
+  .ui-app-launcher-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 640px) and (max-width: 1023.98px) {
   .ui-panel {
     padding: 18px;

@@ -13,8 +13,8 @@ export function ScannerPage({ siteId }: ScannerPageProps) {
   const [selectedClient, setSelectedClient] = useState<QRScanResult | null>(null);
 
   const statusText = useMemo(() => {
-    if (!selectedClient) return "Esperando escaneo. Pega el QR o usa la camara.";
-    return `Cliente listo para operacion: ${selectedClient.full_name || "Sin nombre"}`;
+    if (!selectedClient) return "Esperando escaneo. Pega el QR o usa la cámara.";
+    return `Cliente listo para operación: ${selectedClient.full_name || "Sin nombre"}`;
   }, [selectedClient]);
 
   return (
@@ -22,7 +22,7 @@ export function ScannerPage({ siteId }: ScannerPageProps) {
       <div className="ui-panel">
         <h1 className="ui-h1">Pulso</h1>
         <p className="mt-2 ui-body-muted">
-          Escanea identificacion y redenciones alineado con Vento Pass.
+          Escanea identificación y redenciones alineado con Vento Pass.
         </p>
       </div>
 

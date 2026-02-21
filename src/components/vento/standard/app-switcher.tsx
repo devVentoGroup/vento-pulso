@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import Image from "next/image";
 
 type AppStatus = "active" | "soon";
@@ -13,7 +14,7 @@ type AppLink = {
   logoSrc: string;
   brandColor: string;
   status: AppStatus;
-  group: "Workspace" | "Operacion" | "Proximamente";
+  group: "Workspace" | "Operación" | "Próximamente";
 };
 
 type SiteOption = {
@@ -38,7 +39,7 @@ function DotsIcon() {
 }
 
 function StatusPill({ status }: { status: AppStatus }) {
-  const label = status === "active" ? "Activo" : "Proximamente";
+  const label = status === "active" ? "Activo" : "Próximamente";
   const cls = status === "active" ? "ui-app-status ui-app-status--active" : "ui-app-status ui-app-status--soon";
 
   return <span className={cls}>{label}</span>;
@@ -50,23 +51,25 @@ function AppTile({ app, onNavigate }: { app: AppLink; onNavigate: () => void }) 
   const fallback = app.name.slice(0, 1);
 
   const logoNode = logoError ? (
-    <div className="ui-app-icon-fallback">{fallback}</div>
+    <div className="ui-app-logo-fallback" style={{ "--app-color": app.brandColor } as CSSProperties}>
+      {fallback}
+    </div>
   ) : (
     <Image
       src={app.logoSrc}
       alt={`Logo ${app.name}`}
-      className="ui-app-icon"
-      width={40}
-      height={40}
+      className="ui-app-logo"
+      width={28}
+      height={28}
       onError={() => setLogoError(true)}
     />
   );
 
   if (!isActive) {
     return (
-      <div className="ui-app-glyph ui-app-glyph--soon">
-        <div className="ui-app-glyph-icon-wrap">{logoNode}</div>
-        <div className="ui-app-glyph-name">{app.name}</div>
+      <div className="ui-app-tile ui-app-tile--soon" style={{ "--app-color": app.brandColor } as CSSProperties}>
+        <div className="flex items-center gap-2">{logoNode}</div>
+        <div className="mt-3 text-sm font-semibold text-[var(--ui-text)]">{app.name}</div>
         <div className="mt-1">
           <StatusPill status={app.status} />
         </div>
@@ -75,9 +78,14 @@ function AppTile({ app, onNavigate }: { app: AppLink; onNavigate: () => void }) 
   }
 
   return (
-    <a href={app.href} onClick={onNavigate} className="ui-app-glyph ui-app-glyph--active">
-      <div className="ui-app-glyph-icon-wrap">{logoNode}</div>
-      <div className="ui-app-glyph-name">{app.name}</div>
+    <a
+      href={app.href}
+      onClick={onNavigate}
+      className="ui-app-tile ui-app-tile--active"
+      style={{ "--app-color": app.brandColor } as CSSProperties}
+    >
+      <div className="flex items-center gap-2">{logoNode}</div>
+      <div className="mt-3 text-sm font-semibold text-[var(--ui-text)]">{app.name}</div>
       <div className="mt-1">
         <StatusPill status={app.status} />
       </div>
@@ -105,12 +113,12 @@ export function AppSwitcher(props: AppSwitcherProps) {
       {
         id: "nexo",
         name: "NEXO",
-        description: "Inventario y logistica.",
+        description: "Inventario y logística.",
         logoSrc: "/apps/nexo.svg",
         brandColor: "#F59E0B",
         href: "https://nexo.ventogroup.co",
         status: "active",
-        group: "Operacion",
+        group: "Operación",
       },
       {
         id: "origo",
@@ -120,7 +128,7 @@ export function AppSwitcher(props: AppSwitcherProps) {
         brandColor: "#0EA5E9",
         href: "https://origo.ventogroup.co",
         status: "active",
-        group: "Operacion",
+        group: "Operación",
       },
       {
         id: "pulso",
@@ -130,27 +138,27 @@ export function AppSwitcher(props: AppSwitcherProps) {
         brandColor: "#EF4444",
         href: "https://pulso.ventogroup.co",
         status: "active",
-        group: "Operacion",
+        group: "Operación",
       },
       {
         id: "viso",
         name: "VISO",
-        description: "Gerencia y auditoria.",
+        description: "Gerencia y auditoría.",
         logoSrc: "/apps/viso.svg",
         brandColor: "#6366F1",
         href: "https://viso.ventogroup.co",
         status: "soon",
-        group: "Proximamente",
+        group: "Próximamente",
       },
       {
         id: "fogo",
         name: "FOGO",
-        description: "Recetas y produccion.",
+        description: "Recetas y producción.",
         logoSrc: "/apps/fogo.svg",
         brandColor: "#FB7185",
         href: "https://fogo.ventogroup.co",
         status: "soon",
-        group: "Proximamente",
+        group: "Próximamente",
       },
       {
         id: "aura",
@@ -160,15 +168,15 @@ export function AppSwitcher(props: AppSwitcherProps) {
         brandColor: "#A855F7",
         href: "https://aura.ventogroup.co",
         status: "soon",
-        group: "Proximamente",
+        group: "Próximamente",
       },
     ],
     []
   );
 
   const workspace = apps.filter((a) => a.group === "Workspace");
-  const operacion = apps.filter((a) => a.group === "Operacion");
-  const proximamente = apps.filter((a) => a.group === "Proximamente");
+  const operacion = apps.filter((a) => a.group === "Operación");
+  const proximamente = apps.filter((a) => a.group === "Próximamente");
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -179,6 +187,14 @@ export function AppSwitcher(props: AppSwitcherProps) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
+
+  useEffect(() => {
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, []);
 
   return (
     <div ref={rootRef} className="relative">
@@ -195,11 +211,11 @@ export function AppSwitcher(props: AppSwitcherProps) {
       </button>
 
       {open ? (
-        <div className="ui-app-launcher absolute right-0 z-50 mt-2 w-[min(92vw,380px)] animate-[launcherIn_160ms_ease-out] rounded-2xl">
+        <div className="ui-app-launcher fixed inset-x-3 top-[76px] z-50 max-h-[calc(100dvh-92px)] animate-[launcherIn_160ms_ease-out] rounded-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:max-h-none sm:w-[min(92vw,460px)]">
           <div className="ui-app-launcher-header">
             <div>
               <div className="text-sm font-semibold text-[var(--ui-text)]">Apps del ecosistema</div>
-              <div className="text-xs text-[var(--ui-muted)]">Accede rapido a cada modulo del ecosistema.</div>
+              <div className="text-xs text-[var(--ui-muted)]">Accede rápido a cada módulo del ecosistema.</div>
             </div>
           </div>
 
@@ -217,7 +233,7 @@ export function AppSwitcher(props: AppSwitcherProps) {
 
             {operacion.length > 0 ? (
               <section>
-                <div className="mb-2 text-xs font-semibold tracking-wide text-[var(--ui-muted)]">OPERACION</div>
+                <div className="mb-2 text-xs font-semibold tracking-wide text-[var(--ui-muted)]">OPERACIÓN</div>
                 <div className="ui-app-launcher-grid">
                   {operacion.map((app) => (
                     <AppTile key={app.id} app={app} onNavigate={() => setOpen(false)} />
@@ -228,7 +244,7 @@ export function AppSwitcher(props: AppSwitcherProps) {
 
             {proximamente.length > 0 ? (
               <section>
-                <div className="mb-2 text-xs font-semibold tracking-wide text-[var(--ui-muted)]">PROXIMAMENTE</div>
+                <div className="mb-2 text-xs font-semibold tracking-wide text-[var(--ui-muted)]">PRÓXIMAMENTE</div>
                 <div className="ui-app-launcher-grid">
                   {proximamente.map((app) => (
                     <AppTile key={app.id} app={app} onNavigate={() => setOpen(false)} />

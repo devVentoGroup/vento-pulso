@@ -27,7 +27,7 @@ export async function awardExternalLoyaltyPoints(
     if (!data || typeof data !== "object") {
       return {
         success: false,
-        error: "Respuesta inv·lida del servidor",
+        error: "Respuesta inv√°lida del servidor",
       };
     }
 

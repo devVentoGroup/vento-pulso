@@ -58,7 +58,7 @@ export async function validateRedemption(
     if (redemptionError || !redemption) {
       return {
         success: false,
-        error: redemptionError?.message || "Codigo QR no encontrado",
+        error: redemptionError?.message || "Código QR no encontrado",
       };
     }
 
@@ -67,10 +67,10 @@ export async function validateRedemption(
         success: false,
         error:
           redemption.status === "validated"
-            ? "Este codigo ya fue utilizado"
+            ? "Este código ya fue utilizado"
             : redemption.status === "cancelled"
-              ? "Este codigo ha sido cancelado"
-              : "Este codigo no esta disponible",
+              ? "Este código ha sido cancelado"
+              : "Este código no está disponible",
       };
     }
 
@@ -91,10 +91,10 @@ export async function validateRedemption(
       },
     };
   } catch (error) {
-    console.error("Error validando redencion:", error);
+    console.error("Error validando redención:", error);
     return {
       success: false,
-      error: "Error inesperado al validar el codigo",
+      error: "Error inesperado al validar el código",
     };
   }
 }
@@ -129,13 +129,13 @@ export async function markRedemptionAsUsed(
       .maybeSingle();
 
     if (updateError) {
-      return { success: false, error: updateError.message || "Error al procesar la redencion" };
+      return { success: false, error: updateError.message || "Error al procesar la redención" };
     }
 
     if (!data) {
       return {
         success: false,
-        error: "Este codigo ya fue utilizado o no esta disponible",
+        error: "Este código ya fue utilizado o no está disponible",
       };
     }
 

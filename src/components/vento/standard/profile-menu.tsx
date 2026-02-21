@@ -129,7 +129,7 @@ export function ProfileMenu({ name, role, email, sites }: ProfileMenuProps) {
           ) : null}
           {email ? <div className="mt-2 text-xs text-[var(--ui-muted)]">Email: {email}</div> : null}
           <div className="mt-3 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-2 text-xs text-[var(--ui-muted)]">
-            Sesion activa en NEXO.
+            Sesión activa en NEXO.
           </div>
           {canSwitchRole ? (
             <div className="mt-3 space-y-3 rounded-xl border border-[var(--ui-brand-600)] bg-[var(--ui-brand-soft)] px-3 py-2">
@@ -195,7 +195,7 @@ export function ProfileMenu({ name, role, email, sites }: ProfileMenuProps) {
             disabled={isSigningOut}
             className="mt-3 inline-flex h-12 w-full items-center justify-center rounded-xl bg-[var(--ui-primary)] px-3 text-base font-semibold text-[var(--ui-on-primary)] hover:bg-[var(--ui-primary-hover)] disabled:opacity-60"
           >
-            {isSigningOut ? "Cerrando..." : "Cerrar sesion"}
+            {isSigningOut ? "Cerrando..." : "Cerrar sesión"}
           </button>
         </div>
       ) : null}

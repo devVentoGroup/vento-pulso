@@ -53,7 +53,7 @@ const APP_CODE = process.env.NEXT_PUBLIC_VENTO_APP_CODE ?? APP_ENTITY;
 const APP_NAME = process.env.NEXT_PUBLIC_VENTO_APP_NAME ?? "PULSO";
 const APP_TAGLINE =
   process.env.NEXT_PUBLIC_VENTO_APP_TAGLINE ??
-  "Scanner de clientes y redenciones";
+  "Escáner de clientes y redenciones";
 const PERMISSIONS_ENABLED =
   (process.env.NEXT_PUBLIC_VENTO_PERMISSIONS ?? "false") === "true";
 
@@ -63,7 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         href: "/",
-        label: "Scanner",
+        label: "Escáner",
         description: "Identificación y redención",
         icon: "scan",
       },

@@ -3,7 +3,7 @@
     "403712d74bd1bc7c1ab56badb1257bb2b90d26a549": {
       "workers": {
         "app/scanner/page": {
-          "moduleId": 58005,
+          "moduleId": 39799,
           "async": false,
           "exportedName": "validateRedemption",
           "filename": "src/modules/pos/api/redemption.api.ts"
@@ -18,7 +18,7 @@
     "608a4f13b5e17640bcb9e2f44c7cdac2e9123baef1": {
       "workers": {
         "app/scanner/page": {
-          "moduleId": 58005,
+          "moduleId": 39799,
           "async": false,
           "exportedName": "processRedemptionAction",
           "filename": "src/modules/pos/actions/validate-redemption.action.ts"
@@ -29,6 +29,21 @@
       },
       "exportedName": "processRedemptionAction",
       "filename": "src/modules/pos/actions/validate-redemption.action.ts"
+    },
+    "4063aa0e7188cc125c200c073ddc0f788077693c41": {
+      "workers": {
+        "app/scanner/page": {
+          "moduleId": 39799,
+          "async": false,
+          "exportedName": "awardLoyaltyPointsAction",
+          "filename": "src/modules/pos/actions/award-loyalty.action.ts"
+        }
+      },
+      "layer": {
+        "app/scanner/page": "action-browser"
+      },
+      "exportedName": "awardLoyaltyPointsAction",
+      "filename": "src/modules/pos/actions/award-loyalty.action.ts"
     }
   },
   "edge": {}

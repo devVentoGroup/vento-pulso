@@ -155,8 +155,8 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
         void scanLoop();
       });
     } catch (err) {
-      console.error("Error iniciando camara:", err);
-      setError("No se pudo acceder a la camara. Verifica permisos.");
+      console.error("Error iniciando cámara:", err);
+      setError("No se pudo acceder a la cámara. Verifica los permisos.");
       setScanning(false);
     }
   };
@@ -168,7 +168,7 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ui-text)]">
           <Camera className="h-4 w-4" />
-          Camara activa
+          Cámara activa
         </div>
         <button
           type="button"
@@ -202,7 +202,7 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
       <canvas ref={canvasRef} className="hidden" />
 
       {!scanning && !error ? (
-        <div className="mt-2 ui-body-muted">Preparando camara...</div>
+        <div className="mt-2 ui-body-muted">Preparando cámara...</div>
       ) : null}
 
       {error ? (

@@ -41,7 +41,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
     resetAlerts();
 
     if (!rawCode.trim()) {
-      setError("Ingresa un codigo QR valido");
+      setError("Ingresa un código QR válido");
       return;
     }
 
@@ -51,13 +51,13 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
 
       if (mode === "redemption") {
         if (result.type !== "redemption") {
-          setError("Este codigo no corresponde a una redencion");
+          setError("Este código no corresponde a una redención");
           return;
         }
 
         const redemptionResult = await processRedemptionAction(rawCode.trim());
         if (!redemptionResult.success) {
-          setError(redemptionResult.error || "Error al validar el canje");
+          setError(redemptionResult.error || "Error al validar la redención");
           return;
         }
 
@@ -69,7 +69,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
       }
 
       if (result.type !== "client" || !result.client) {
-        setError("Este codigo no corresponde a un cliente");
+        setError("Este código no corresponde a un cliente");
         return;
       }
 
@@ -78,7 +78,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
       setQrInput("");
     } catch (err) {
       console.error("Error al procesar QR:", err);
-      setError("Error al procesar el codigo");
+      setError("Error al procesar el código");
     } finally {
       setIsScanning(false);
     }
@@ -98,7 +98,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
 
     const amount = Number(amountCop);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Ingresa un monto valido mayor a 0");
+      setError("Ingresa un monto válido mayor a 0");
       return;
     }
 
@@ -148,7 +148,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <QrCode className="h-5 w-5 text-[var(--ui-brand)]" />
-          <h3 className="ui-h3">Scanner</h3>
+          <h3 className="ui-h3">Escáner</h3>
         </div>
 
         <div className="flex items-center gap-2">
@@ -162,7 +162,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
               resetAlerts();
             }}
           >
-            Identificacion
+            Identificación
           </button>
           <button
             type="button"
@@ -174,15 +174,15 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
               resetAlerts();
             }}
           >
-            Redencion
+            Redención
           </button>
         </div>
       </div>
 
       <p className="mt-2 ui-body-muted">
         {mode === "identification"
-          ? "Escanea QR de Vento ID para identificar cliente y otorgar puntos."
-          : "Escanea QR de redencion para validar canjes pendientes."}
+          ? "Escanea QR de Vento ID para identificar clientes y otorgar puntos."
+          : "Escanea QR de redención para validar canjes pendientes."}
       </p>
 
       <div className="mt-4 space-y-3">
@@ -220,7 +220,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
           onClick={() => setCameraActive((v) => !v)}
         >
           <QrCode className="h-4 w-4" />
-          {cameraActive ? "Cerrar camara" : "Escanear con camara"}
+          {cameraActive ? "Cerrar cámara" : "Escanear con cámara"}
         </button>
 
         <CameraQRScanner
@@ -255,7 +255,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
             <input
               className="ui-input"
               inputMode="numeric"
-              placeholder="Monto compra (COP)"
+              placeholder="Monto de compra (COP)"
               value={amountCop}
               onChange={(e) => setAmountCop(e.target.value.replace(/[^0-9]/g, ""))}
             />

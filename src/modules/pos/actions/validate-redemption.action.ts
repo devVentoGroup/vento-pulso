@@ -15,14 +15,14 @@ export async function processRedemptionAction(
     if (!validation.success || !validation.redemption) {
       return {
         success: false,
-        error: validation.error || "Codigo QR invalido",
+        error: validation.error || "Código QR inválido",
       };
     }
     const markResult = await markRedemptionAsUsed(validation.redemption.id, orderId);
     if (!markResult.success) {
       return {
         success: false,
-        error: markResult.error || "Error al procesar la redencion",
+        error: markResult.error || "Error al procesar la redención",
       };
     }
     return {
@@ -30,10 +30,10 @@ export async function processRedemptionAction(
       redemption: validation.redemption,
     };
   } catch (error) {
-    console.error("Error procesando redencion:", error);
+    console.error("Error procesando redención:", error);
     return {
       success: false,
-      error: "Error inesperado al procesar la redencion",
+      error: "Error inesperado al procesar la redención",
     };
   }
 }
