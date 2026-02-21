@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -39,17 +40,8 @@ type VentoChromeProps = {
   activeSiteId: string;
 };
 
-const APP_ENTITY =
-  (process.env.NEXT_PUBLIC_VENTO_ENTITY?.toLowerCase() as
-    | "default"
-    | "nexo"
-    | "fogo"
-    | "pulso"
-    | "viso"
-    | "origo"
-    | "anima"
-    | "aura") ?? "pulso";
-const APP_CODE = process.env.NEXT_PUBLIC_VENTO_APP_CODE ?? APP_ENTITY;
+const APP_ENTITY = "pulso";
+const APP_CODE = "pulso";
 const APP_NAME = process.env.NEXT_PUBLIC_VENTO_APP_NAME ?? "PULSO";
 const APP_TAGLINE =
   process.env.NEXT_PUBLIC_VENTO_APP_TAGLINE ??
@@ -218,6 +210,7 @@ export function VentoChrome({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [headerLogoSrc, setHeaderLogoSrc] = useState("/logos/pulso.svg");
   const [permMap, setPermMap] = useState<Record<string, boolean>>({});
   const [permissionsReady, setPermissionsReady] = useState(!PERMISSIONS_ENABLED);
 
@@ -385,7 +378,14 @@ export function VentoChrome({
                 </button>
                 <div className="hidden sm:flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--ui-surface-2)] ring-1 ring-inset ring-[var(--ui-border)]">
-                    <img src={`/logos/${APP_ENTITY}.svg`} alt={APP_NAME} className="h-6 w-6" />
+                    <Image
+                      src={headerLogoSrc}
+                      alt={`${APP_NAME} logo`}
+                      width={24}
+                      height={24}
+                      className="h-6 w-6"
+                      onError={() => setHeaderLogoSrc("/apps/pulso.svg")}
+                    />
                   </div>
                   <div className="flex flex-col leading-tight">
                     <span className="text-sm font-semibold text-[var(--ui-text)]">{APP_NAME}</span>

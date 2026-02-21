@@ -429,11 +429,11 @@ body {
 @keyframes vento-line-glow {
   0%,
   100% {
-    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.45));
+    filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.45));
     opacity: 0.9;
   }
   50% {
-    filter: drop-shadow(0 0 14px rgba(245, 158, 11, 0.85));
+    filter: drop-shadow(0 0 14px rgba(0, 212, 255, 0.85));
     opacity: 1;
   }
 }

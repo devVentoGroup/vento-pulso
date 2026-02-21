@@ -41,6 +41,12 @@
       "namedRegex": "^/_not\\-found(?:/)?$"
     },
     {
+      "page": "/no-access",
+      "regex": "^/no\\-access(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/no\\-access(?:/)?$"
+    },
+    {
       "page": "/scanner",
       "regex": "^/scanner(?:/)?$",
       "routeKeys": {},
