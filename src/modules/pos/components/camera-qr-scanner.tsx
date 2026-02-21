@@ -13,25 +13,35 @@ type DetectorLike = {
 };
 
 type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => DetectorLike;
+type ImageCaptureLike = {
+  grabFrame: () => Promise<ImageBitmap>;
+};
+type ImageCaptureCtor = new (track: MediaStreamTrack) => ImageCaptureLike;
 
 declare global {
   interface Window {
     BarcodeDetector?: BarcodeDetectorCtor;
+    ImageCapture?: ImageCaptureCtor;
   }
 }
+
+const SCAN_INTERVAL_MS = 350;
 
 export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const frameRef = useRef<number | null>(null);
+  const imageCaptureRef = useRef<ImageCaptureLike | null>(null);
+  const timerRef = useRef<number | null>(null);
   const lastValueRef = useRef<string>("");
   const detectorRef = useRef<DetectorLike | null>(null);
+  const runningRef = useRef(false);
 
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState<string>("");
   const [scanning, setScanning] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     if (!active) return;
@@ -49,7 +59,16 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
       }
     };
 
+    const onDeviceChange = () => {
+      void loadDevices();
+    };
+
     void loadDevices();
+    navigator.mediaDevices?.addEventListener?.("devicechange", onDeviceChange);
+
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
+    };
   }, [active, deviceId]);
 
   useEffect(() => {
@@ -57,12 +76,27 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
 
     const Detector = window.BarcodeDetector;
     if (!Detector) {
-      setError("Tu navegador no soporta escaneo nativo de QR. Usa el modo manual.");
+      detectorRef.current = null;
+      setError(
+        "Este navegador no soporta deteccion QR por camara. Usa ingreso manual."
+      );
       return;
     }
 
-    detectorRef.current = new Detector({ formats: ["qr_code"] });
-    setError(null);
+    try {
+      detectorRef.current = new Detector({ formats: ["qr_code"] });
+      setError(null);
+    } catch {
+      try {
+        detectorRef.current = new Detector();
+        setError(null);
+      } catch {
+        detectorRef.current = null;
+        setError(
+          "No se pudo inicializar el detector QR. Usa ingreso manual."
+        );
+      }
+    }
   }, [active]);
 
   useEffect(() => {
@@ -72,92 +106,160 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
     }
 
     void startStream();
-
-    return () => {
-      stopStream();
-    };
+    return () => stopStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, deviceId]);
 
-  const stopStream = () => {
-    setScanning(false);
-    if (frameRef.current) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
+  const clearTimer = () => {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
+  };
+
+  const stopStream = () => {
+    runningRef.current = false;
+    clearTimer();
+    setScanning(false);
+    setStarting(false);
 
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
 
+    imageCaptureRef.current = null;
+
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
   };
 
-  const scanLoop = async () => {
-    if (!active || !videoRef.current || !canvasRef.current || !detectorRef.current) {
-      return;
-    }
+  const scheduleNext = () => {
+    if (!runningRef.current) return;
+    timerRef.current = window.setTimeout(() => {
+      void scanLoop();
+    }, SCAN_INTERVAL_MS);
+  };
 
+  const detectWithCanvas = async () => {
+    if (!videoRef.current || !canvasRef.current || !detectorRef.current) return null;
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null;
 
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (!w || !h) return null;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+
+    canvas.width = w;
+    canvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+
+    const results = await detectorRef.current.detect(canvas);
+    return results[0]?.rawValue?.trim() ?? null;
+  };
+
+  const detectFrame = async () => {
+    if (!detectorRef.current) return null;
+
+    if (imageCaptureRef.current) {
+      try {
+        const bitmap = await imageCaptureRef.current.grabFrame();
         try {
-          const results = await detectorRef.current.detect(canvas);
-          const value = results[0]?.rawValue?.trim();
-          if (value && value !== lastValueRef.current) {
-            lastValueRef.current = value;
-            onDetected(value);
-            setTimeout(() => {
-              lastValueRef.current = "";
-            }, 1200);
-          }
-        } catch {
-          // keep scanning
+          const results = await detectorRef.current.detect(bitmap);
+          return results[0]?.rawValue?.trim() ?? null;
+        } finally {
+          bitmap.close();
         }
+      } catch {
+        // fallback to canvas when grabFrame fails
       }
     }
 
-    frameRef.current = requestAnimationFrame(() => {
-      void scanLoop();
-    });
+    return detectWithCanvas();
+  };
+
+  const scanLoop = async () => {
+    if (!runningRef.current) return;
+
+    try {
+      const value = await detectFrame();
+      if (value && value !== lastValueRef.current) {
+        lastValueRef.current = value;
+        onDetected(value);
+        window.setTimeout(() => {
+          lastValueRef.current = "";
+        }, 1200);
+      }
+    } catch {
+      // keep scanning
+    } finally {
+      scheduleNext();
+    }
   };
 
   const startStream = async () => {
     try {
       stopStream();
+      setStarting(true);
       setError(null);
 
-      const constraints: MediaStreamConstraints = {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError("Tu navegador no permite acceso a camara. Usa ingreso manual.");
+        setStarting(false);
+        return;
+      }
+
+      const preferredConstraints: MediaStreamConstraints = {
         video: deviceId
-          ? { deviceId: { exact: deviceId } }
-          : { facingMode: { ideal: "environment" } },
+          ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(preferredConstraints);
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false,
+        });
+      }
 
-      if (!videoRef.current) return;
+      streamRef.current = stream;
+      const videoTrack = stream.getVideoTracks()[0];
+
+      if (videoTrack && window.ImageCapture) {
+        try {
+          imageCaptureRef.current = new window.ImageCapture(videoTrack);
+        } catch {
+          imageCaptureRef.current = null;
+        }
+      }
+
+      if (!videoRef.current) {
+        setStarting(false);
+        return;
+      }
+
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
+
+      runningRef.current = true;
       setScanning(true);
-      frameRef.current = requestAnimationFrame(() => {
-        void scanLoop();
-      });
+      setStarting(false);
+      void scanLoop();
     } catch (err) {
-      console.error("Error iniciando cámara:", err);
-      setError("No se pudo acceder a la cámara. Verifica los permisos.");
+      console.error("Error iniciando camara:", err);
+      setError("No se pudo acceder a la camara. Verifica permisos.");
       setScanning(false);
+      setStarting(false);
     }
   };
 
@@ -168,7 +270,7 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ui-text)]">
           <Camera className="h-4 w-4" />
-          Cámara activa
+          Camara activa
         </div>
         <button
           type="button"
@@ -201,8 +303,9 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
       </div>
       <canvas ref={canvasRef} className="hidden" />
 
-      {!scanning && !error ? (
-        <div className="mt-2 ui-body-muted">Preparando cámara...</div>
+      {starting ? <div className="mt-2 ui-body-muted">Iniciando camara...</div> : null}
+      {!starting && scanning && !error ? (
+        <div className="mt-2 ui-body-muted">Escaneando QR automaticamente...</div>
       ) : null}
 
       {error ? (
