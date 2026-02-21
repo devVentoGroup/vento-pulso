@@ -8,6 +8,11 @@ const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
 export const metadata = {
   title: "Pulso",
   description: "Escáner de clientes y redenciones",
+  icons: {
+    icon: "/logos/pulso.svg",
+    shortcut: "/logos/pulso.svg",
+    apple: "/logos/pulso.svg",
+  },
 };
 
 export default function RootLayout({

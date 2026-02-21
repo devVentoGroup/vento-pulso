@@ -14,6 +14,7 @@ type ProfileMenuProps = {
   role?: string;
   email?: string | null;
   sites?: Array<{ id: string; name: string | null }>;
+  activeSiteId?: string;
 };
 
 function initialsFrom(value?: string) {
@@ -24,7 +25,7 @@ function initialsFrom(value?: string) {
   return letters.join("") || "VG";
 }
 
-export function ProfileMenu({ name, role, email, sites }: ProfileMenuProps) {
+export function ProfileMenu({ name, role, email, sites, activeSiteId: defaultActiveSiteId }: ProfileMenuProps) {
   const [open, setOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [overrideRole, setOverrideRole] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export function ProfileMenu({ name, role, email, sites }: ProfileMenuProps) {
     () => new Map(ROLE_OPTIONS.map((item) => [item.value, item.label])),
     []
   );
-  const activeSiteId = searchParams.get("site_id") ?? "";
+  const activeSiteId = searchParams.get("site_id") ?? defaultActiveSiteId ?? "";
 
   const handleSignOut = async () => {
     try {

@@ -396,7 +396,13 @@ export function VentoChrome({
 
               <div className="flex items-center gap-2">
                 <AppSwitcher sites={sites} activeSiteId={activeSiteId} />
-                <ProfileMenu name={displayName} role={role ?? undefined} email={email} sites={sites} />
+                <ProfileMenu
+                  name={displayName}
+                  role={role ?? undefined}
+                  email={email}
+                  sites={sites}
+                  activeSiteId={currentSiteId}
+                />
               </div>
             </div>
           </header>
