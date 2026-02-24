@@ -14,7 +14,7 @@ export default async function PulsoScannerRoute({
     returnTo,
     siteId: params?.site_id ?? null,
     permissionCode: ["pos.main"],
-    requireAppAccessPermission: false,
+    requireAppAccessPermission: true,
   });
 
   const siteId = params?.site_id ?? resolvedSiteId ?? "";

@@ -3,11 +3,10 @@
 import { useMemo, useState } from "react";
 import { CreditCard, QrCode, User, X } from "lucide-react";
 
-import { CameraQRScanner } from "./camera-qr-scanner";
-import { decodeQRCode, type QRDecodeResult } from "../api/qr-scanner.api";
 import type { QRScanResult, ScannerMode } from "../types";
 import { processRedemptionAction } from "../actions/validate-redemption.action";
 import { awardLoyaltyPointsAction } from "../actions/award-loyalty.action";
+import { identifyClientAction } from "../actions/identify-client.action";
 
 interface QRScannerProps {
   onScan: (result: QRScanResult) => void;
@@ -21,8 +20,6 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
   const [isScanning, setIsScanning] = useState(false);
   const [qrInput, setQrInput] = useState("");
   const [amountCop, setAmountCop] = useState("");
-  const [externalRef, setExternalRef] = useState("");
-  const [cameraActive, setCameraActive] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,27 +34,45 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
     setError(null);
   };
 
+  const handleClearClient = () => {
+    onClear();
+    setAmountCop("");
+    resetAlerts();
+  };
+
+  const buildAutoExternalRef = (userId: string) => {
+    const sitePart = (siteId || "site").slice(0, 8);
+    const userPart = userId.slice(0, 8);
+    const stamp = Date.now().toString();
+    const nonce = Math.random().toString(36).slice(2, 8);
+    return `pulso-${sitePart}-${userPart}-${stamp}-${nonce}`;
+  };
+
+  const handleModeChange = (nextMode: ScannerMode) => {
+    setMode(nextMode);
+    setQrInput("");
+    setAmountCop("");
+    resetAlerts();
+
+    if (nextMode !== "identification") {
+      onClear();
+    }
+  };
+
   const processRawCode = async (rawCode: string) => {
     resetAlerts();
 
     if (!rawCode.trim()) {
-      setError("Ingresa un código QR válido");
+      setError("Ingresa un codigo valido");
       return;
     }
 
     setIsScanning(true);
     try {
-      const result: QRDecodeResult = await decodeQRCode(rawCode.trim());
-
       if (mode === "redemption") {
-        if (result.type !== "redemption") {
-          setError("Este código no corresponde a una redención");
-          return;
-        }
-
         const redemptionResult = await processRedemptionAction(rawCode.trim());
         if (!redemptionResult.success) {
-          setError(redemptionResult.error || "Error al validar la redención");
+          setError(redemptionResult.error || "Error al validar la redencion");
           return;
         }
 
@@ -68,17 +83,18 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
         return;
       }
 
-      if (result.type !== "client" || !result.client) {
-        setError("Este código no corresponde a un cliente");
+      const identified = await identifyClientAction(rawCode.trim(), siteId);
+      if (!identified.success || !identified.client) {
+        setError(identified.error || "No se pudo identificar la cuenta");
         return;
       }
 
-      onScan(result.client);
-      setMessage(`Cliente identificado: ${result.client.full_name || "Sin nombre"}`);
+      onScan(identified.client);
+      setMessage(`Cliente identificado: ${identified.client.full_name || "Sin nombre"}`);
       setQrInput("");
     } catch (err) {
       console.error("Error al procesar QR:", err);
-      setError("Error al procesar el código");
+      setError("Error al procesar el codigo");
     } finally {
       setIsScanning(false);
     }
@@ -98,26 +114,24 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
 
     const amount = Number(amountCop);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Ingresa un monto válido mayor a 0");
-      return;
-    }
-
-    if (!externalRef.trim()) {
-      setError("Ingresa una referencia externa");
+      setError("Ingresa un monto valido mayor a 0");
       return;
     }
 
     setIsScanning(true);
     try {
+      const autoExternalRef = buildAutoExternalRef(selectedClient.user_id);
+
       const result = await awardLoyaltyPointsAction({
         userId: selectedClient.user_id,
         siteId,
         amountCop: amount,
-        externalRef: externalRef.trim(),
-        description: `Compra externa registrada en Pulso (${externalRef.trim()})`,
+        externalRef: autoExternalRef,
+        description: `Compra registrada en Pulso (${autoExternalRef})`,
         metadata: {
           source: "pulso",
           flow: "external_pos",
+          generated_external_ref: true,
         },
       });
 
@@ -130,11 +144,16 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
         return;
       }
 
+      const nextBalance = result.new_balance ?? selectedClient.loyalty_points;
+      onScan({
+        ...selectedClient,
+        loyalty_points: nextBalance,
+      });
+
       setMessage(
         `Puntos otorgados: ${result.points_awarded ?? 0}. Nuevo saldo: ${result.new_balance ?? "-"}`
       );
       setAmountCop("");
-      setExternalRef("");
     } catch (err) {
       console.error("Error otorgando puntos:", err);
       setError("Error inesperado al otorgar puntos");
@@ -148,7 +167,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <QrCode className="h-5 w-5 text-[var(--ui-brand)]" />
-          <h3 className="ui-h3">Escáner</h3>
+          <h3 className="ui-h3">Escaner</h3>
         </div>
 
         <div className="flex items-center gap-2">
@@ -157,32 +176,26 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
             className={`ui-btn h-10 px-3 text-sm ${
               mode === "identification" ? "ui-btn--brand" : "ui-btn--ghost"
             }`}
-            onClick={() => {
-              setMode("identification");
-              resetAlerts();
-            }}
+            onClick={() => handleModeChange("identification")}
           >
-            Identificación
+            Identificacion
           </button>
           <button
             type="button"
             className={`ui-btn h-10 px-3 text-sm ${
               mode === "redemption" ? "ui-btn--brand" : "ui-btn--ghost"
             }`}
-            onClick={() => {
-              setMode("redemption");
-              resetAlerts();
-            }}
+            onClick={() => handleModeChange("redemption")}
           >
-            Redención
+            Redencion
           </button>
         </div>
       </div>
 
       <p className="mt-2 ui-body-muted">
         {mode === "identification"
-          ? "Escanea QR de Vento ID para identificar clientes y otorgar puntos."
-          : "Escanea QR de redención para validar canjes pendientes."}
+          ? "Usa lector USB o pega el codigo de Vento ID para identificar clientes y otorgar puntos."
+          : "Pega el codigo de redencion para validar canjes pendientes."}
       </p>
 
       <div className="mt-4 space-y-3">
@@ -201,6 +214,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
               }
             }}
             className="ui-input flex-1"
+            autoFocus
           />
           <button
             type="button"
@@ -213,26 +227,10 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
             {isScanning ? "Procesando..." : "Procesar"}
           </button>
         </div>
-
-        <button
-          type="button"
-          className="ui-btn ui-btn--ghost w-full"
-          onClick={() => setCameraActive((v) => !v)}
-        >
-          <QrCode className="h-4 w-4" />
-          {cameraActive ? "Cerrar cámara" : "Escanear con cámara"}
-        </button>
-
-        <CameraQRScanner
-          active={cameraActive}
-          onDetected={(value) => {
-            void processRawCode(value);
-          }}
-        />
       </div>
 
       {mode === "identification" && selectedClient ? (
-        <div className="mt-4 space-y-3 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] p-3">
+        <div className="mt-4 space-y-3 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] p-4 shadow-sm">
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 text-[var(--ui-brand)]" />
             <div className="min-w-0 flex-1">
@@ -246,12 +244,17 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
                 Puntos actuales: {selectedClient.loyalty_points}
               </p>
             </div>
-            <button type="button" className="ui-btn ui-btn--ghost h-9 px-3" onClick={onClear}>
+            <button
+              type="button"
+              className="ui-btn ui-btn--ghost h-9 px-3"
+              onClick={handleClearClient}
+              aria-label="Quitar cliente"
+            >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="grid gap-2 md:grid-cols-2">
+          <div className="grid gap-2">
             <input
               className="ui-input"
               inputMode="numeric"
@@ -259,12 +262,10 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
               value={amountCop}
               onChange={(e) => setAmountCop(e.target.value.replace(/[^0-9]/g, ""))}
             />
-            <input
-              className="ui-input"
-              placeholder="Referencia externa"
-              value={externalRef}
-              onChange={(e) => setExternalRef(e.target.value)}
-            />
+          </div>
+
+          <div className="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 text-xs text-[var(--ui-muted)]">
+            La referencia externa se genera automaticamente al confirmar.
           </div>
 
           <div className="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 text-sm">
@@ -273,7 +274,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
 
           <button
             type="button"
-            className="ui-btn ui-btn--primary w-full"
+            className="ui-btn ui-btn--brand w-full"
             disabled={isScanning || estimatedPoints <= 0}
             onClick={() => {
               void handleAwardPoints();
