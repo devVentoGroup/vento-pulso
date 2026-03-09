@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { checkPermission, normalizePermissionCode } from "@/lib/auth/permissions";
 import {
@@ -40,7 +41,9 @@ type RolePermissionEntry = {
   scope_area_kind: string | null;
 };
 
-async function loadRolePermissions(supabase: any, role: string) {
+type RoleOverrideClient = Pick<SupabaseClient, "from" | "rpc">;
+
+async function loadRolePermissions(supabase: RoleOverrideClient, role: string) {
   if (!role) return [];
 
   const { data: permissions, error } = await supabase
@@ -71,7 +74,7 @@ async function loadRolePermissions(supabase: any, role: string) {
 }
 
 async function resolveContextMeta(
-  supabase: any,
+  supabase: RoleOverrideClient,
   siteId?: string | null,
   areaId?: string | null
 ) {
@@ -135,7 +138,7 @@ function scopeMatches(
 }
 
 export async function isPermissionAllowedForRole(
-  supabase: any,
+  supabase: RoleOverrideClient,
   role: string,
   appId: string,
   code: string,
@@ -163,7 +166,7 @@ export async function checkPermissionWithRoleOverride({
   context,
   actualRole,
 }: {
-  supabase: any;
+  supabase: RoleOverrideClient;
   appId: string;
   code: string;
   context?: { siteId?: string | null; areaId?: string | null };

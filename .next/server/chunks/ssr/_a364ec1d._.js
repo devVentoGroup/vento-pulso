@@ -1,3 +1,0 @@
-module.exports=[50645,a=>{a.n(a.i(27572))},43619,a=>{a.n(a.i(79962))},13718,a=>{a.n(a.i(85523))},18198,a=>{a.n(a.i(45518))},62212,a=>{a.n(a.i(66114))},25566,a=>{"use strict";var b=a.i(7997),c=a.i(96213),d=a.i(16761);async function e({searchParams:a}){let e=await a,f=e?.site_id?`/scanner?site_id=${e.site_id}`:"/scanner",{siteId:g}=await (0,d.requireAppAccess)({appId:"pulso",returnTo:f,siteId:e?.site_id??null,permissionCode:["pos.main"],requireAppAccessPermission:!1}),h=e?.site_id??g??"";return(0,b.jsx)(c.ScannerPage,{siteId:h})}a.s(["default",()=>e])}];
-
-//# sourceMappingURL=_a364ec1d._.js.map

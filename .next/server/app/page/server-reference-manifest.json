@@ -1,24 +1,9 @@
 {
   "node": {
-    "403712d74bd1bc7c1ab56badb1257bb2b90d26a549": {
+    "6014017031c90629b5c4ca92745a1ff1d4edea47ff": {
       "workers": {
         "app/page": {
-          "moduleId": 29093,
-          "async": false,
-          "exportedName": "validateRedemption",
-          "filename": "src/modules/pos/api/redemption.api.ts"
-        }
-      },
-      "layer": {
-        "app/page": "action-browser"
-      },
-      "exportedName": "validateRedemption",
-      "filename": "src/modules/pos/api/redemption.api.ts"
-    },
-    "608a4f13b5e17640bcb9e2f44c7cdac2e9123baef1": {
-      "workers": {
-        "app/page": {
-          "moduleId": 29093,
+          "moduleId": 89269,
           "async": false,
           "exportedName": "processRedemptionAction",
           "filename": "src/modules/pos/actions/validate-redemption.action.ts"
@@ -30,10 +15,10 @@
       "exportedName": "processRedemptionAction",
       "filename": "src/modules/pos/actions/validate-redemption.action.ts"
     },
-    "4063aa0e7188cc125c200c073ddc0f788077693c41": {
+    "40e4604bbe9d373f3d635b888ffd5f3d8e47eb3e1d": {
       "workers": {
         "app/page": {
-          "moduleId": 29093,
+          "moduleId": 89269,
           "async": false,
           "exportedName": "awardLoyaltyPointsAction",
           "filename": "src/modules/pos/actions/award-loyalty.action.ts"
@@ -44,6 +29,21 @@
       },
       "exportedName": "awardLoyaltyPointsAction",
       "filename": "src/modules/pos/actions/award-loyalty.action.ts"
+    },
+    "601d18ba2716a9cb7cf069c837d9e99cae1b31e774": {
+      "workers": {
+        "app/page": {
+          "moduleId": 89269,
+          "async": false,
+          "exportedName": "identifyClientAction",
+          "filename": "src/modules/pos/actions/identify-client.action.ts"
+        }
+      },
+      "layer": {
+        "app/page": "action-browser"
+      },
+      "exportedName": "identifyClientAction",
+      "filename": "src/modules/pos/actions/identify-client.action.ts"
     }
   },
   "edge": {}

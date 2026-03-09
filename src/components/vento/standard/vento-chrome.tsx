@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -58,6 +58,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Escáner",
         description: "Identificación y redención",
         icon: "scan",
+      },
+      {
+        href: "/orders",
+        label: "Pedidos",
+        description: "Tablero operativo",
+        icon: "clipboard",
       },
     ],
   },
@@ -233,15 +239,11 @@ export function VentoChrome({
 
   useEffect(() => {
     if (!PERMISSIONS_ENABLED) {
-      setPermMap({});
-      setPermissionsReady(true);
       return;
     }
     let isActiveRequest = true;
     const supabase = createClient();
     const siteId = currentSiteId || activeSiteId || null;
-
-    setPermissionsReady(false);
 
     Promise.all(
       permissionCodes.map((code) =>
@@ -272,29 +274,29 @@ export function VentoChrome({
     };
   }, [currentSiteId, activeSiteId, permissionCodes]);
 
-  const can = (code?: string) => (code ? Boolean(permMap[code]) : false);
-
-  const isItemVisible = (item: NavItem) => {
-    if (!PERMISSIONS_ENABLED) return true;
-    if (!permissionsReady) return false;
-    if (item.allowedRoles?.length) {
-      const currentRole = String(role ?? "").toLowerCase();
-      if (!item.allowedRoles.some((r) => r.toLowerCase() === currentRole)) {
-        return false;
-      }
-    }
-    if (item.required?.length) return item.required.every((code) => can(code));
-    if (item.anyOf?.length) return item.anyOf.some((code) => can(code));
-    return true;
-  };
-
   const visibleGroups = useMemo(() => {
     if (!permissionsReady) return [];
+
+    const can = (code?: string) => (code ? Boolean(permMap[code]) : false);
+    const currentRole = String(role ?? "").toLowerCase();
+
     return NAV_GROUPS.map((group) => ({
       label: group.label,
-      items: group.items.filter((item) => isItemVisible(item)),
+      items: group.items.filter((item) => {
+        if (!PERMISSIONS_ENABLED) return true;
+
+        if (item.allowedRoles?.length) {
+          if (!item.allowedRoles.some((r) => r.toLowerCase() === currentRole)) {
+            return false;
+          }
+        }
+
+        if (item.required?.length) return item.required.every((code) => can(code));
+        if (item.anyOf?.length) return item.anyOf.some((code) => can(code));
+        return true;
+      }),
     })).filter((group) => group.items.length > 0);
-  }, [permissionsReady, permMap]);
+  }, [permissionsReady, permMap, role]);
 
   return (
     <div className="min-h-screen bg-[var(--ui-bg)] text-[var(--ui-text)]">
@@ -413,4 +415,5 @@ export function VentoChrome({
     </div>
   );
 }
+
 

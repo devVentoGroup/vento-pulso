@@ -62,7 +62,7 @@ export async function VentoShell({ children }: { children: React.ReactNode }) {
         sites = (siteRows ?? []) as SiteRow[];
       }
     }
-  } catch (_err) {
+  } catch {
     // Supabase no configurado o error de red: mostramos shell con valores por defecto
     // para que la página no quede en blanco (p. ej. en producción sin env vars).
   }

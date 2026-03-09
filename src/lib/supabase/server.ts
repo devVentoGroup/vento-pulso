@@ -4,7 +4,9 @@ import { cookies } from "next/headers";
 const cookieDomain =
   process.env.NEXT_PUBLIC_COOKIE_DOMAIN || process.env.COOKIE_DOMAIN;
 
-function withCookieDomain(options?: any) {
+type CookieOptions = Record<string, unknown> | undefined;
+
+function withCookieDomain(options?: CookieOptions) {
   if (!cookieDomain) return options;
   return { ...(options ?? {}), domain: cookieDomain };
 }

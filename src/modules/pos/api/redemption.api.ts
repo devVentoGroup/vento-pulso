@@ -38,7 +38,7 @@ export async function validateRedemption(
     const cleanQrCode = qrCode.trim();
 
     const { data: redemption, error: redemptionError } = await supabase
-      .from("loyalty_redemptions")
+      .schema("pass").from("loyalty_redemptions")
       .select(
         `
         id,
@@ -117,7 +117,7 @@ export async function markRedemptionAsUsed(
     const validatedAt = new Date().toISOString();
 
     const { data, error: updateError } = await supabase
-      .from("loyalty_redemptions")
+      .schema("pass").from("loyalty_redemptions")
       .update({
         status: "validated",
         validated_at: validatedAt,
@@ -145,3 +145,4 @@ export async function markRedemptionAsUsed(
     return { success: false, error: "Error inesperado" };
   }
 }
+

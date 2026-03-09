@@ -1,37 +1,15 @@
 {
   "node": {
-    "403712d74bd1bc7c1ab56badb1257bb2b90d26a549": {
+    "6014017031c90629b5c4ca92745a1ff1d4edea47ff": {
       "workers": {
         "app/page": {
-          "moduleId": 29093,
-          "async": false,
-          "exportedName": "validateRedemption",
-          "filename": "src/modules/pos/api/redemption.api.ts"
-        },
-        "app/scanner/page": {
-          "moduleId": 39799,
-          "async": false,
-          "exportedName": "validateRedemption",
-          "filename": "src/modules/pos/api/redemption.api.ts"
-        }
-      },
-      "layer": {
-        "app/page": "action-browser",
-        "app/scanner/page": "action-browser"
-      },
-      "filename": "src/modules/pos/api/redemption.api.ts",
-      "exportedName": "validateRedemption"
-    },
-    "608a4f13b5e17640bcb9e2f44c7cdac2e9123baef1": {
-      "workers": {
-        "app/page": {
-          "moduleId": 29093,
+          "moduleId": 89269,
           "async": false,
           "exportedName": "processRedemptionAction",
           "filename": "src/modules/pos/actions/validate-redemption.action.ts"
         },
         "app/scanner/page": {
-          "moduleId": 39799,
+          "moduleId": 60035,
           "async": false,
           "exportedName": "processRedemptionAction",
           "filename": "src/modules/pos/actions/validate-redemption.action.ts"
@@ -44,16 +22,16 @@
       "filename": "src/modules/pos/actions/validate-redemption.action.ts",
       "exportedName": "processRedemptionAction"
     },
-    "4063aa0e7188cc125c200c073ddc0f788077693c41": {
+    "40e4604bbe9d373f3d635b888ffd5f3d8e47eb3e1d": {
       "workers": {
         "app/page": {
-          "moduleId": 29093,
+          "moduleId": 89269,
           "async": false,
           "exportedName": "awardLoyaltyPointsAction",
           "filename": "src/modules/pos/actions/award-loyalty.action.ts"
         },
         "app/scanner/page": {
-          "moduleId": 39799,
+          "moduleId": 60035,
           "async": false,
           "exportedName": "awardLoyaltyPointsAction",
           "filename": "src/modules/pos/actions/award-loyalty.action.ts"
@@ -65,8 +43,60 @@
       },
       "filename": "src/modules/pos/actions/award-loyalty.action.ts",
       "exportedName": "awardLoyaltyPointsAction"
+    },
+    "601d18ba2716a9cb7cf069c837d9e99cae1b31e774": {
+      "workers": {
+        "app/page": {
+          "moduleId": 89269,
+          "async": false,
+          "exportedName": "identifyClientAction",
+          "filename": "src/modules/pos/actions/identify-client.action.ts"
+        },
+        "app/scanner/page": {
+          "moduleId": 60035,
+          "async": false,
+          "exportedName": "identifyClientAction",
+          "filename": "src/modules/pos/actions/identify-client.action.ts"
+        }
+      },
+      "layer": {
+        "app/page": "action-browser",
+        "app/scanner/page": "action-browser"
+      },
+      "filename": "src/modules/pos/actions/identify-client.action.ts",
+      "exportedName": "identifyClientAction"
+    },
+    "4072e3aff6275935c57cf87e829d21505013b2c9aa": {
+      "workers": {
+        "app/orders/page": {
+          "moduleId": 93668,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_1",
+          "filename": "src/app/orders/page.tsx"
+        }
+      },
+      "layer": {
+        "app/orders/page": "rsc"
+      },
+      "filename": "src/app/orders/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "40ee466da961b69a57b8d19758fc6145a8fa531530": {
+      "workers": {
+        "app/orders/page": {
+          "moduleId": 93668,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_0",
+          "filename": "src/app/orders/page.tsx"
+        }
+      },
+      "layer": {
+        "app/orders/page": "rsc"
+      },
+      "filename": "src/app/orders/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_0"
     }
   },
   "edge": {},
-  "encryptionKey": "DRIm8pFcPkdD993xBgiKsvM13XCtFygBQdxNG4D3XuI="
+  "encryptionKey": "9McvdQgpLnqAjbeLJGjyff0ueRPZC3ClpU1nt/c8atM="
 }

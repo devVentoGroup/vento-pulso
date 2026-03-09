@@ -1,7 +1,11 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type PermissionContext = {
   siteId?: string | null;
   areaId?: string | null;
 };
+
+type PermissionClient = Pick<SupabaseClient, "rpc">;
 
 export function normalizePermissionCode(appId: string, code: string) {
   if (code.startsWith(`${appId}.`)) return code;
@@ -9,7 +13,7 @@ export function normalizePermissionCode(appId: string, code: string) {
 }
 
 export async function checkPermission(
-  supabase: any,
+  supabase: PermissionClient,
   appId: string,
   code: string,
   context: PermissionContext = {}

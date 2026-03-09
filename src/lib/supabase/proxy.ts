@@ -4,9 +4,22 @@ import { NextResponse, type NextRequest } from "next/server";
 const cookieDomain =
   process.env.NEXT_PUBLIC_COOKIE_DOMAIN || process.env.COOKIE_DOMAIN;
 
-function withCookieDomain(options?: any) {
+type CookieOptions = Record<string, unknown> | undefined;
+
+function withCookieDomain(options?: CookieOptions) {
   if (!cookieDomain) return options;
   return { ...(options ?? {}), domain: cookieDomain };
+}
+
+function getAuthErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = error as {
+    code?: unknown;
+    __isAuthError?: unknown;
+  };
+  if (typeof candidate.code === "string") return candidate.code;
+  if (candidate.__isAuthError) return undefined;
+  return undefined;
 }
 
 function getSupabaseKey() {
@@ -71,9 +84,9 @@ export async function updateSession(request: NextRequest) {
   try {
     // Mantiene la sesión consistente cuando sí existe cookie.
     await supabase.auth.getUser();
-  } catch (e: any) {
+  } catch (error: unknown) {
     // Si la sesión está corrupta o es de otro proyecto, limpiamos cookies para cortar el loop.
-    const code = e?.code || e?.__isAuthError ? e?.code : undefined;
+    const code = getAuthErrorCode(error);
 
     if (code === "refresh_token_not_found") {
       clearSupabaseCookies(request, response);

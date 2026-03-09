@@ -47,6 +47,12 @@
       "namedRegex": "^/no\\-access(?:/)?$"
     },
     {
+      "page": "/orders",
+      "regex": "^/orders(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/orders(?:/)?$"
+    },
+    {
       "page": "/scanner",
       "regex": "^/scanner(?:/)?$",
       "routeKeys": {},
