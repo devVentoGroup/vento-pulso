@@ -5,60 +5,7 @@
 begin;
 
 -- 1) Reasignar productos desde categorías antiguas a las nuevas hojas canon.
-
--- Helpers: obtener id de hoja por slug (global, sin parent específico).
-with
-  hoja_salsas_listas as (
-    select id from public.product_categories
-    where slug = 'preparacion-salsas-listas' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_salsas_madre as (
-    select id from public.product_categories
-    where slug = 'preparacion-salsas-madre-bases-saladas' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_masas_saladas as (
-    select id from public.product_categories
-    where slug = 'preparacion-masas-bases-saladas' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_masas_dulces as (
-    select id from public.product_categories
-    where slug = 'preparacion-masas-bases-dulces' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_fermentos as (
-    select id from public.product_categories
-    where slug = 'preparacion-fermentos-masas-madre' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_mise_proteina as (
-    select id from public.product_categories
-    where slug = 'preparacion-mise-en-place-proteina' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_mise_vegetal as (
-    select id from public.product_categories
-    where slug = 'preparacion-mise-en-place-vegetal' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_cremas_rellenos_dulces as (
-    select id from public.product_categories
-    where slug = 'preparacion-cremas-rellenos-dulces' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_salsas_coulis_dulces as (
-    select id from public.product_categories
-    where slug = 'preparacion-salsas-coulis-dulces' and site_id is null
-    order by created_at asc limit 1
-  ),
-  hoja_toppings_decoraciones as (
-    select id from public.product_categories
-    where slug = 'preparacion-toppings-decoraciones' and site_id is null
-    order by created_at asc limit 1
-  )
--- Usamos DO para poder leer las hojas y aplicar los updates en bloque.
+--    Usamos DO; buscamos las hojas por slug dentro del propio bloque.
 do $$
 declare
   v_salsas_listas uuid;
@@ -72,16 +19,55 @@ declare
   v_salsas_coulis uuid;
   v_toppings uuid;
 begin
-  select id into v_salsas_listas from hoja_salsas_listas;
-  select id into v_salsas_madre from hoja_salsas_madre;
-  select id into v_masas_saladas from hoja_masas_saladas;
-  select id into v_masas_dulces from hoja_masas_dulces;
-  select id into v_fermentos from hoja_fermentos;
-  select id into v_mise_proteina from hoja_mise_proteina;
-  select id into v_mise_vegetal from hoja_mise_vegetal;
-  select id into v_cremas_rellenos from hoja_cremas_rellenos_dulces;
-  select id into v_salsas_coulis from hoja_salsas_coulis_dulces;
-  select id into v_toppings from hoja_toppings_decoraciones;
+  select id into v_salsas_listas
+  from public.product_categories
+  where slug = 'preparacion-salsas-listas' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_salsas_madre
+  from public.product_categories
+  where slug = 'preparacion-salsas-madre-bases-saladas' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_masas_saladas
+  from public.product_categories
+  where slug = 'preparacion-masas-bases-saladas' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_masas_dulces
+  from public.product_categories
+  where slug = 'preparacion-masas-bases-dulces' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_fermentos
+  from public.product_categories
+  where slug = 'preparacion-fermentos-masas-madre' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_mise_proteina
+  from public.product_categories
+  where slug = 'preparacion-mise-en-place-proteina' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_mise_vegetal
+  from public.product_categories
+  where slug = 'preparacion-mise-en-place-vegetal' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_cremas_rellenos
+  from public.product_categories
+  where slug = 'preparacion-cremas-rellenos-dulces' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_salsas_coulis
+  from public.product_categories
+  where slug = 'preparacion-salsas-coulis-dulces' and site_id is null
+  order by created_at asc limit 1;
+
+  select id into v_toppings
+  from public.product_categories
+  where slug = 'preparacion-toppings-decoraciones' and site_id is null
+  order by created_at asc limit 1;
 
   -- Aderezos fríos -> Salsas listas para servicio
   if v_salsas_listas is not null then

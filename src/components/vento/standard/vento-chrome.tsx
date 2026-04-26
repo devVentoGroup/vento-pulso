@@ -54,6 +54,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Operación",
     items: [
       {
+        href: "/salon",
+        label: "Salón",
+        description: "Plano y llamados",
+        icon: "map",
+      },
+      {
         href: "/",
         label: "Escáner",
         description: "Identificación y redención",
@@ -185,10 +191,26 @@ function Icon({ name }: { name?: IconName }) {
   }
 }
 
-function SidebarLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate: () => void }) {
+function withSiteParam(href: string, siteId: string | null) {
+  if (!siteId) return href;
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}site_id=${encodeURIComponent(siteId)}`;
+}
+
+function SidebarLink({
+  item,
+  active,
+  onNavigate,
+  currentSiteId,
+}: {
+  item: NavItem;
+  active: boolean;
+  onNavigate: () => void;
+  currentSiteId: string | null;
+}) {
   return (
     <Link
-      href={item.href}
+      href={withSiteParam(item.href, currentSiteId)}
       onClick={onNavigate}
       className={`ui-sidebar-item ${active ? "active" : ""}`}
     >
@@ -358,6 +380,7 @@ export function VentoChrome({
                         item={item}
                         active={isActive(item.href)}
                         onNavigate={() => setMenuOpen(false)}
+                        currentSiteId={currentSiteId || null}
                       />
                     ))}
                   </div>
@@ -397,7 +420,7 @@ export function VentoChrome({
               </div>
 
               <div className="flex items-center gap-2">
-                <AppSwitcher sites={sites} activeSiteId={activeSiteId} />
+                <AppSwitcher sites={sites} activeSiteId={activeSiteId} role={role} />
                 <ProfileMenu
                   name={displayName}
                   role={role ?? undefined}

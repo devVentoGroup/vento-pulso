@@ -5,7 +5,7 @@ R.c("server/chunks/ssr/node_modules_next_dist_esm_build_templates_app-page_65a72
 R.c("server/chunks/ssr/[root-of-the-server]__52cd670f._.js")
 R.c("server/chunks/ssr/[root-of-the-server]__655f8d11._.js")
 R.c("server/chunks/ssr/[root-of-the-server]__f955b5b1._.js")
-R.c("server/chunks/ssr/[root-of-the-server]__0c220043._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__2a194964._.js")
 R.c("server/chunks/ssr/_691f916b._.js")
 R.c("server/chunks/ssr/node_modules_next_dist_client_components_9774470f._.js")
 R.c("server/chunks/ssr/node_modules_next_dist_client_components_builtin_forbidden_45780354.js")
