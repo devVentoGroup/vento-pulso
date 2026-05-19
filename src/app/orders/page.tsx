@@ -97,6 +97,26 @@ type OrderStatusEventRow = {
   created_at: string;
 };
 
+type OrderConversationRow = {
+  id: string;
+  order_id: string;
+  site_id: string;
+  client_id: string;
+  status: string;
+  last_message_at: string | null;
+};
+
+type OrderMessageRow = {
+  id: string;
+  conversation_id: string;
+  order_id: string;
+  site_id: string;
+  author_id: string;
+  author_type: "client" | "staff" | "system";
+  body: string;
+  created_at: string;
+};
+
 type EmployeeRow = {
   id: string;
   alias: string | null;
@@ -485,6 +505,49 @@ export async function assignDispatchOrderAction(formData: FormData) {
   );
 }
 
+export async function sendOrderMessageAction(formData: FormData) {
+  "use server";
+
+  const conversationId = readFormString(formData, "conversation_id");
+  const orderId = readFormString(formData, "order_id");
+  const siteId = readFormString(formData, "site_id");
+  const view = asViewFilter(readFormString(formData, "view"));
+  const fulfillment = asFulfillmentFilter(readFormString(formData, "fulfillment"));
+  const body = readFormString(formData, "body");
+
+  if (!UUID_REGEX.test(conversationId) || !UUID_REGEX.test(orderId) || !UUID_REGEX.test(siteId)) {
+    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Chat invalido." }));
+  }
+
+  if (!body) {
+    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "El mensaje no puede estar vacio." }));
+  }
+
+  const returnTo = buildOrdersHref({ siteId, view, fulfillment });
+  const { supabase, user } = await requireAppAccess({
+    appId: "pulso",
+    returnTo,
+    siteId,
+    permissionCode: ["pos.main"],
+    requireAppAccessPermission: true,
+  });
+
+  const { error: insertError } = await supabase.from("order_messages").insert({
+    conversation_id: conversationId,
+    order_id: orderId,
+    site_id: siteId,
+    author_id: user.id,
+    author_type: "staff",
+    body,
+  });
+
+  if (insertError) {
+    redirect(buildOrdersHref({ siteId, view, fulfillment, error: insertError.message }));
+  }
+
+  redirect(buildOrdersHref({ siteId, view, fulfillment, message: "Mensaje enviado." }));
+}
+
 export default async function OrdersOperationalPage({
   searchParams,
 }: {
@@ -539,6 +602,9 @@ export default async function OrdersOperationalPage({
   let orderItemsError: string | null = null;
   let orderEventsByOrder: Record<string, OrderStatusEventView[]> = {};
   let orderEventsError: string | null = null;
+  let conversationByOrder: Record<string, OrderConversationRow> = {};
+  let messagesByConversation: Record<string, OrderMessageRow[]> = {};
+  let orderMessagesError: string | null = null;
 
   if (orderIds.length > 0) {
     const { data: orderItemsData, error: itemsError } = await supabase
@@ -604,6 +670,42 @@ export default async function OrdersOperationalPage({
 
       orderEventsByOrder = mapOrderEvents(rawEvents, actorNameById);
     }
+
+    const { data: conversationsData, error: conversationsError } = await supabase
+      .from("order_conversations")
+      .select("id,order_id,site_id,client_id,status,last_message_at")
+      .in("order_id", orderIds)
+      .order("last_message_at", { ascending: false, nullsFirst: false });
+
+    if (conversationsError) {
+      orderMessagesError = conversationsError.message;
+    } else {
+      const rawConversations = (conversationsData ?? []) as OrderConversationRow[];
+      conversationByOrder = Object.fromEntries(
+        rawConversations.map((conversation) => [conversation.order_id, conversation])
+      );
+
+      const conversationIds = rawConversations.map((conversation) => conversation.id);
+      if (conversationIds.length > 0) {
+        const { data: messagesData, error: messagesError } = await supabase
+          .from("order_messages")
+          .select("id,conversation_id,order_id,site_id,author_id,author_type,body,created_at")
+          .in("conversation_id", conversationIds)
+          .order("created_at", { ascending: true })
+          .limit(conversationIds.length * 20);
+
+        if (messagesError) {
+          orderMessagesError = messagesError.message;
+        } else {
+          const rawMessages = (messagesData ?? []) as OrderMessageRow[];
+          messagesByConversation = rawMessages.reduce<Record<string, OrderMessageRow[]>>((acc, message) => {
+            if (!acc[message.conversation_id]) acc[message.conversation_id] = [];
+            acc[message.conversation_id].push(message);
+            return acc;
+          }, {});
+        }
+      }
+    }
   }
 
   const activeCount = orders.filter(
@@ -652,6 +754,9 @@ export default async function OrdersOperationalPage({
       ) : null}
       {orderEventsError ? (
         <div className="ui-alert ui-alert--warn">No se pudo cargar la bitácora: {orderEventsError}</div>
+      ) : null}
+      {orderMessagesError ? (
+        <div className="ui-alert ui-alert--warn">No se pudo cargar el chat: {orderMessagesError}</div>
       ) : null}
 
       <div className="ui-panel-soft space-y-4">
@@ -719,6 +824,8 @@ export default async function OrdersOperationalPage({
           {orders.map((order) => {
             const detailItems = orderItemsByOrder[order.id] ?? [];
             const detailEvents = orderEventsByOrder[order.id] ?? [];
+            const conversation = conversationByOrder[order.id] ?? null;
+            const chatMessages = conversation ? messagesByConversation[conversation.id] ?? [] : [];
             const guestName = extractText(order.guest_info, "contact_name");
             const guestPhone = extractText(order.guest_info, "contact_phone") || order.contact_phone;
             const fullAddress = formatAddress(order.delivery_address);
@@ -841,6 +948,73 @@ export default async function OrdersOperationalPage({
                     <div className="ui-body">{order.notes}</div>
                   </div>
                 ) : null}
+
+                <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="ui-label">Chat cliente</div>
+                      <div className="ui-caption">
+                        {conversation
+                          ? `Estado: ${conversation.status}`
+                          : "El cliente aún no ha abierto chat para este pedido."}
+                      </div>
+                    </div>
+                    {conversation?.last_message_at ? (
+                      <div className="ui-caption">Último: {formatDate(conversation.last_message_at)}</div>
+                    ) : null}
+                  </div>
+
+                  {conversation ? (
+                    <div className="mt-3 space-y-3">
+                      <div className="max-h-72 space-y-2 overflow-auto pr-1 ui-scrollbar-subtle">
+                        {chatMessages.length === 0 ? (
+                          <div className="ui-caption">Sin mensajes todavía.</div>
+                        ) : (
+                          chatMessages.slice(-12).map((message) => {
+                            const mine = message.author_type === "staff";
+                            return (
+                              <div
+                                key={message.id}
+                                className={`rounded-xl border px-3 py-2 ${
+                                  mine
+                                    ? "ml-8 border-cyan-200 bg-cyan-50"
+                                    : "mr-8 border-[var(--ui-border)] bg-[var(--ui-surface)]"
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="ui-caption font-semibold">
+                                    {mine ? "Pulso" : message.author_type === "client" ? "Cliente" : "Sistema"}
+                                  </div>
+                                  <div className="ui-caption">{formatDate(message.created_at)}</div>
+                                </div>
+                                <div className="mt-1 ui-body text-sm">{message.body}</div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {order.status !== "delivered" && order.status !== "cancelled" ? (
+                        <form action={sendOrderMessageAction} className="flex flex-col gap-2 sm:flex-row">
+                          <input type="hidden" name="conversation_id" value={conversation.id} />
+                          <input type="hidden" name="order_id" value={order.id} />
+                          <input type="hidden" name="site_id" value={siteId ?? ""} />
+                          <input type="hidden" name="view" value={view} />
+                          <input type="hidden" name="fulfillment" value={fulfillment} />
+                          <input
+                            className="ui-input min-h-10 flex-1"
+                            name="body"
+                            placeholder="Responder al cliente"
+                            maxLength={600}
+                          />
+                          <button type="submit" className="ui-btn ui-btn--primary h-10 px-3 text-sm">
+                            Enviar
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
 
                 <form action={updateOperationalOrderAction} className="flex flex-wrap gap-2">
                   <input type="hidden" name="order_id" value={order.id} />
