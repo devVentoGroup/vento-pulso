@@ -1,6 +1,6 @@
 {
   "node": {
-    "60fe957239327894f5791e44c9ec82010e6445272f": {
+    "6077cee1c9afff4589c31de7bd45354f261f656469": {
       "workers": {
         "app/page": {
           "moduleId": 89269,
@@ -22,7 +22,7 @@
       "filename": "src/modules/pos/actions/validate-redemption.action.ts",
       "exportedName": "processRedemptionAction"
     },
-    "406afcec3981fceba0ae0f161c4ffd1c44782af604": {
+    "400c6141746e9bf6fbb341f7ddbd568b7abad602bd": {
       "workers": {
         "app/page": {
           "moduleId": 89269,
@@ -44,7 +44,7 @@
       "filename": "src/modules/pos/actions/award-loyalty.action.ts",
       "exportedName": "awardLoyaltyPointsAction"
     },
-    "603cac1b11215355300cb5c885c9b23b3fb11bd401": {
+    "60989be4fd59f5961c80372c6feaeec1d8e47122e7": {
       "workers": {
         "app/page": {
           "moduleId": 89269,
@@ -66,7 +66,7 @@
       "filename": "src/modules/pos/actions/identify-client.action.ts",
       "exportedName": "identifyClientAction"
     },
-    "40773d596266fb8f75753a706b4ffaaafe31aad5c6": {
+    "4058d522c689da9a349b02c209d03a6520577e2c9f": {
       "workers": {
         "app/orders/page": {
           "moduleId": 93668,
@@ -81,7 +81,7 @@
       "filename": "src/app/orders/page.tsx",
       "exportedName": "$$RSC_SERVER_ACTION_0"
     },
-    "40d14505b8ef16c2703d0a5800fa3474094d81bf85": {
+    "406e630d26ef42d33f554a92cb493a2952daff846d": {
       "workers": {
         "app/orders/page": {
           "moduleId": 93668,
@@ -95,8 +95,23 @@
       },
       "filename": "src/app/orders/page.tsx",
       "exportedName": "$$RSC_SERVER_ACTION_1"
+    },
+    "40850ff984c4d638884e7bcb6a5b503e8085fd9373": {
+      "workers": {
+        "app/orders/page": {
+          "moduleId": 93668,
+          "async": false,
+          "exportedName": "$$RSC_SERVER_ACTION_2",
+          "filename": "src/app/orders/page.tsx"
+        }
+      },
+      "layer": {
+        "app/orders/page": "rsc"
+      },
+      "filename": "src/app/orders/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_2"
     }
   },
   "edge": {},
-  "encryptionKey": "larA24dojixNQyMmUjvgmNyPIHZAgNxr20rrFpWhaSA="
+  "encryptionKey": "KMTRlQNXwhmrsxHKLeN4yyOx82uoRjqqcyVASEAVxQQ="
 }

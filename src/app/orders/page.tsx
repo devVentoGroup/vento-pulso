@@ -258,6 +258,12 @@ function canMoveToInTransit(order: OrderRow) {
 function actionButtons(order: OrderRow) {
   const status = order.status || "pending";
   const buttons: { op: OpsAction; label: string }[] = [];
+  const paymentStatus = order.payment_status || "unpaid";
+
+  if (paymentStatus !== "paid" && status !== "cancelled") {
+    buttons.push({ op: "mark_cancelled", label: "Cancelar" });
+    return buttons;
+  }
 
   if (status === "pending" || status === "confirmed") {
     buttons.push({ op: "mark_preparing", label: "Preparando" });
@@ -396,6 +402,19 @@ export async function updateOperationalOrderAction(formData: FormData) {
   });
 
   const operation = op as OpsAction;
+  if (operation !== "mark_cancelled") {
+    const { data: paymentOrder, error: paymentOrderError } = await supabase
+      .from("orders")
+      .select("id,payment_status")
+      .eq("id", orderId)
+      .eq("site_id", siteId)
+      .maybeSingle();
+
+    if (paymentOrderError || paymentOrder?.payment_status !== "paid") {
+      redirect(buildOrdersHref({ siteId, view, fulfillment, error: "No puedes operar un pedido sin pago aprobado." }));
+    }
+  }
+
   if (operation === "mark_in_transit") {
     const { data: order, error: orderError } = await supabase
       .from("orders")
@@ -1021,6 +1040,12 @@ export default async function OrdersOperationalPage({
                   <input type="hidden" name="site_id" value={siteId ?? ""} />
                   <input type="hidden" name="view" value={view} />
                   <input type="hidden" name="fulfillment" value={fulfillment} />
+
+                  {order.payment_status !== "paid" && order.status !== "cancelled" ? (
+                    <div className="ui-alert ui-alert--warn w-full">
+                      Pago pendiente: este pedido no debe prepararse hasta que Wompi lo confirme.
+                    </div>
+                  ) : null}
 
                   {actionButtons(order).map((button) => {
                     const toneClass =
