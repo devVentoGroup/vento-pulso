@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock3,
   PackageCheck,
+  MapPin,
   RefreshCw,
   Store,
   XCircle,
@@ -242,13 +243,30 @@ function extractText(
   return trimmed ? trimmed : null;
 }
 
+function extractNumber(
+  obj: Record<string, unknown> | null | undefined,
+  key: string
+): number | null {
+  if (!obj) return null;
+  const value = obj[key];
+  const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
 function formatAddress(deliveryAddress: Record<string, unknown> | null) {
   if (!deliveryAddress) return null;
   const line1 = extractText(deliveryAddress, "line1");
   const reference = extractText(deliveryAddress, "reference");
   if (!line1 && !reference) return null;
-  if (line1 && reference) return `${line1} · ${reference}`;
+  if (line1 && reference) return `${line1} - ${reference}`;
   return line1 || reference;
+}
+
+function buildMapsHref(deliveryAddress: Record<string, unknown> | null) {
+  const latitude = extractNumber(deliveryAddress, "latitude");
+  const longitude = extractNumber(deliveryAddress, "longitude");
+  if (latitude == null || longitude == null) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
 }
 
 function canMoveToInTransit(order: OrderRow) {
@@ -848,6 +866,7 @@ export default async function OrdersOperationalPage({
             const guestName = extractText(order.guest_info, "contact_name");
             const guestPhone = extractText(order.guest_info, "contact_phone") || order.contact_phone;
             const fullAddress = formatAddress(order.delivery_address);
+            const mapsHref = buildMapsHref(order.delivery_address);
             const statusKey = order.status || "pending";
             const statusClass = STATUS_TONE[statusKey] || "ui-chip";
             const statusLabel = STATUS_LABELS[statusKey] || statusKey;
@@ -926,6 +945,17 @@ export default async function OrdersOperationalPage({
                     <div>
                       <div className="ui-label">Dirección</div>
                       <div className="ui-body">{fullAddress || "Sin dirección cargada"}</div>
+                      {mapsHref ? (
+                        <a
+                          className="mt-2 inline-flex items-center gap-2 rounded-full border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 text-sm font-semibold text-[var(--ui-text)]"
+                          href={mapsHref}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <MapPin className="h-4 w-4" />
+                          Abrir punto en Google Maps
+                        </a>
+                      ) : null}
                       <div className="ui-caption">
                         Aliado: {order.dispatch_partner || "manual"} · Ref: {order.dispatch_reference || "n/a"}
                       </div>
