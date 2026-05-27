@@ -192,6 +192,7 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   failed: "Fallido",
   cancelled: "Cancelado",
   refunded: "Reembolsado",
+  not_required: "No requiere pago",
 };
 
 const DISPATCH_STATUS_LABELS: Record<string, string> = {
@@ -209,14 +210,6 @@ const SOURCE_LABELS: Record<string, string> = {
   pulso: "Vento Pulso",
   pos: "Punto de venta",
   web: "Web",
-};
-
-const CONVERSATION_STATUS_LABELS: Record<string, string> = {
-  waiting_client: "Esperando cliente",
-  open: "Abierto",
-  active: "Activo",
-  closed: "Cerrado",
-  resolved: "Resuelto",
 };
 
 function asViewFilter(value: string | undefined): ViewFilter {
@@ -295,11 +288,6 @@ function formatDispatchStatusLabel(value: string | null | undefined) {
 function formatSourceLabel(value: string | null | undefined) {
   if (!value) return "Sin fuente";
   return SOURCE_LABELS[value] || value;
-}
-
-function formatConversationStatusLabel(value: string | null | undefined) {
-  if (!value) return "Sin estado";
-  return CONVERSATION_STATUS_LABELS[value] || value;
 }
 
 function requiresConfirmedOnlinePayment(order: Pick<OrderRow, "fulfillment_type" | "payment_status" | "status">) {
