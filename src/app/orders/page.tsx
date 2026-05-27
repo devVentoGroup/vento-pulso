@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { requireAppAccess } from "@/lib/auth/guard";
+import { OrderChatLive } from "./order-chat-live";
 
 type PageSearchParams = {
   site_id?: string;
@@ -118,6 +119,16 @@ type OrderMessageRow = {
   created_at: string;
 };
 
+type SendOrderMessageLiveResult =
+  | {
+    ok: true;
+    message: OrderMessageRow;
+  }
+  | {
+    ok: false;
+    error: string;
+  };
+
 type EmployeeRow = {
   id: string;
   alias: string | null;
@@ -172,6 +183,40 @@ const STATUS_TONE: Record<string, string> = {
   on_the_way: "ui-chip ui-chip--brand",
   delivered: "ui-chip ui-chip--success",
   cancelled: "ui-chip",
+};
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  paid: "Pagado",
+  pending: "Pendiente",
+  pending_payment: "Pendiente de pago",
+  unpaid: "Sin pagar",
+  failed: "Fallido",
+  cancelled: "Cancelado",
+  refunded: "Reembolsado",
+};
+
+const DISPATCH_STATUS_LABELS: Record<string, string> = {
+  not_required: "No requiere despacho",
+  pending: "Pendiente",
+  assigned: "Asignado",
+  ready_for_dispatch: "Listo para despacho",
+  in_transit: "En camino",
+  delivered: "Entregado",
+  cancelled: "Cancelado",
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  vento_pass: "Vento Pass",
+  pulso: "Vento Pulso",
+  pos: "Punto de venta",
+  web: "Web",
+};
+
+const CONVERSATION_STATUS_LABELS: Record<string, string> = {
+  waiting_client: "Esperando cliente",
+  open: "Abierto",
+  active: "Activo",
+  closed: "Cerrado",
+  resolved: "Resuelto",
 };
 
 function asViewFilter(value: string | undefined): ViewFilter {
@@ -232,6 +277,49 @@ function formatMoney(value: number | string | null) {
   }).format(parseMoney(value));
 }
 
+function formatStatusLabel(value: string | null | undefined) {
+  if (!value) return "Sin estado";
+  return STATUS_LABELS[value] || value;
+}
+
+function formatPaymentStatusLabel(value: string | null | undefined) {
+  if (!value) return "Sin pagar";
+  return PAYMENT_STATUS_LABELS[value] || value;
+}
+
+function formatDispatchStatusLabel(value: string | null | undefined) {
+  if (!value) return "No requiere despacho";
+  return DISPATCH_STATUS_LABELS[value] || value;
+}
+
+function formatSourceLabel(value: string | null | undefined) {
+  if (!value) return "Sin fuente";
+  return SOURCE_LABELS[value] || value;
+}
+
+function formatConversationStatusLabel(value: string | null | undefined) {
+  if (!value) return "Sin estado";
+  return CONVERSATION_STATUS_LABELS[value] || value;
+}
+
+function requiresConfirmedOnlinePayment(order: Pick<OrderRow, "fulfillment_type" | "payment_status" | "status">) {
+  if (order.status === "cancelled") return false;
+
+  return order.fulfillment_type === "delivery" && order.payment_status !== "paid";
+}
+
+function formatOperationalPaymentLabel(order: Pick<OrderRow, "fulfillment_type" | "payment_status">) {
+  if (order.fulfillment_type === "pickup") {
+    return order.payment_status === "paid" ? "Pagado" : "Pago al recoger";
+  }
+
+  if (order.fulfillment_type === "on_premise") {
+    return order.payment_status === "paid" ? "Pagado" : "Pago en sede";
+  }
+
+  return formatPaymentStatusLabel(order.payment_status);
+}
+
 function extractText(
   obj: Record<string, unknown> | null | undefined,
   key: string
@@ -276,9 +364,8 @@ function canMoveToInTransit(order: OrderRow) {
 function actionButtons(order: OrderRow) {
   const status = order.status || "pending";
   const buttons: { op: OpsAction; label: string }[] = [];
-  const paymentStatus = order.payment_status || "unpaid";
 
-  if (paymentStatus !== "paid" && status !== "cancelled") {
+  if (requiresConfirmedOnlinePayment(order)) {
     buttons.push({ op: "mark_cancelled", label: "Cancelar" });
     return buttons;
   }
@@ -359,8 +446,8 @@ function mapOrderEvents(
     const actorName = event.changed_by
       ? actorNameById.get(event.changed_by) || `Staff ${event.changed_by.slice(0, 8)}`
       : event.actor_type === "system"
-      ? "Sistema"
-      : "Staff";
+        ? "Sistema"
+        : "Staff";
 
     const next: OrderStatusEventView = {
       id: event.id,
@@ -420,16 +507,30 @@ export async function updateOperationalOrderAction(formData: FormData) {
   });
 
   const operation = op as OpsAction;
+
   if (operation !== "mark_cancelled") {
     const { data: paymentOrder, error: paymentOrderError } = await supabase
       .from("orders")
-      .select("id,payment_status")
+      .select("id,payment_status,fulfillment_type,status")
       .eq("id", orderId)
       .eq("site_id", siteId)
       .maybeSingle();
 
-    if (paymentOrderError || paymentOrder?.payment_status !== "paid") {
-      redirect(buildOrdersHref({ siteId, view, fulfillment, error: "No puedes operar un pedido sin pago aprobado." }));
+    const paymentOrderRow = (paymentOrder ?? null) as OrderRow | null;
+
+    if (paymentOrderError || !paymentOrderRow?.id) {
+      redirect(buildOrdersHref({ siteId, view, fulfillment, error: "No pudimos validar el pago del pedido." }));
+    }
+
+    if (requiresConfirmedOnlinePayment(paymentOrderRow)) {
+      redirect(
+        buildOrdersHref({
+          siteId,
+          view,
+          fulfillment,
+          error: "Este domicilio necesita pago aprobado antes de operarse.",
+        })
+      );
     }
   }
 
@@ -583,6 +684,68 @@ export async function sendOrderMessageAction(formData: FormData) {
   }
 
   redirect(buildOrdersHref({ siteId, view, fulfillment, message: "Mensaje enviado." }));
+}
+
+export async function sendOrderMessageLiveAction(input: {
+  conversationId: string;
+  orderId: string;
+  siteId: string;
+  body: string;
+}): Promise<SendOrderMessageLiveResult> {
+  "use server";
+
+  const conversationId = input.conversationId?.trim();
+  const orderId = input.orderId?.trim();
+  const siteId = input.siteId?.trim();
+  const body = input.body?.trim();
+
+  if (!UUID_REGEX.test(conversationId) || !UUID_REGEX.test(orderId) || !UUID_REGEX.test(siteId)) {
+    return {
+      ok: false,
+      error: "Chat inválido.",
+    };
+  }
+
+  if (!body) {
+    return {
+      ok: false,
+      error: "El mensaje no puede estar vacío.",
+    };
+  }
+
+  const returnTo = buildOrdersHref({ siteId });
+  const { supabase, user } = await requireAppAccess({
+    appId: "pulso",
+    returnTo,
+    siteId,
+    permissionCode: ["pos.main"],
+    requireAppAccessPermission: true,
+  });
+
+  const { data, error } = await supabase
+    .from("order_messages")
+    .insert({
+      conversation_id: conversationId,
+      order_id: orderId,
+      site_id: siteId,
+      author_id: user.id,
+      author_type: "staff",
+      body,
+    })
+    .select("id,conversation_id,order_id,site_id,author_id,author_type,body,created_at")
+    .single();
+
+  if (error) {
+    return {
+      ok: false,
+      error: error.message,
+    };
+  }
+
+  return {
+    ok: true,
+    message: data as OrderMessageRow,
+  };
 }
 
 export default async function OrdersOperationalPage({
@@ -771,7 +934,7 @@ export default async function OrdersOperationalPage({
               Gestiona estado de preparación y despacho en tiempo real por sede.
             </p>
           </div>
-          <Link href={baseHref} className="ui-btn ui-btn--ghost h-10 px-3 text-sm">
+          <Link href={baseHref} className="ui-btn ui-btn--ghost h-9 px-3 text-sm">
             <RefreshCw className="h-4 w-4" />
             Actualizar
           </Link>
@@ -805,16 +968,16 @@ export default async function OrdersOperationalPage({
               item === "active"
                 ? "Activos"
                 : item === "delivered"
-                ? "Entregados"
-                : item === "cancelled"
-                  ? "Cancelados"
-                  : "Todos";
+                  ? "Entregados"
+                  : item === "cancelled"
+                    ? "Cancelados"
+                    : "Todos";
 
             return (
               <Link
                 key={item}
                 href={href}
-                className={`ui-btn h-10 px-3 text-sm ${active ? "ui-btn--brand" : "ui-btn--ghost"}`}
+                className={`ui-btn h-9 px-3 text-sm ${active ? "ui-btn--brand" : "ui-btn--ghost"}`}
               >
                 {label}
               </Link>
@@ -839,7 +1002,7 @@ export default async function OrdersOperationalPage({
               <Link
                 key={item}
                 href={href}
-                className={`ui-btn h-10 px-3 text-sm ${active ? "ui-btn--primary" : "ui-btn--ghost"}`}
+                className={`ui-btn h-9 px-3 text-sm ${active ? "ui-btn--primary" : "ui-btn--ghost"}`}
               >
                 {label}
               </Link>
@@ -876,64 +1039,93 @@ export default async function OrdersOperationalPage({
                 : order.fulfillment_type === "pickup"
                   ? "Recoger"
                   : "En sitio";
+            const orderCode = order.id.slice(0, 8).toUpperCase();
+            const paymentLabel = formatOperationalPaymentLabel(order);
+            const dispatchLabel = formatDispatchStatusLabel(order.dispatch_status);
+            const sourceLabel = formatSourceLabel(order.source);
+            const operationButtons = actionButtons(order);
+            const itemCount = detailItems.reduce((sum, item) => sum + item.quantity, 0);
 
             return (
-              <div key={order.id} className="ui-panel space-y-4">
+              <div key={order.id} className="ui-panel space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="ui-label">Pedido</div>
-                    <div className="ui-h3">#{order.id.slice(0, 8).toUpperCase()}</div>
-                    <div className="mt-1 ui-caption">{formatDate(order.created_at)}</div>
-                  </div>
-                  <div className={statusClass}>{statusLabel}</div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-2">
-                    <div className="ui-label">Cliente</div>
-                    <div className="ui-body">{guestName || "Sin nombre"}</div>
-                    <div className="ui-caption">{guestPhone || "Sin teléfono"}</div>
-                  </div>
-                  <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-2">
-                    <div className="ui-label">Fulfillment</div>
-                    <div className="ui-body inline-flex items-center gap-2">
-                      {order.fulfillment_type === "delivery" ? (
-                        <Bike className="h-4 w-4" />
-                      ) : (
-                        <Store className="h-4 w-4" />
-                      )}
-                      {fulfillmentLabel}
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="ui-h3">Pedido #{orderCode}</div>
+                      <div className={statusClass}>{statusLabel}</div>
                     </div>
-                    <div className="ui-caption">Despacho: {order.dispatch_status || "not_required"}</div>
+
+                    <div className="mt-1 ui-caption">
+                      {formatDate(order.created_at)}
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-2">
-                    <div className="ui-label">Total</div>
-                    <div className="ui-body">{formatMoney(order.total_amount)}</div>
-                    <div className="ui-caption">Pago: {order.payment_status || "unpaid"}</div>
-                  </div>
-                  <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-2">
-                    <div className="ui-label">Origen</div>
-                    <div className="ui-body">{order.source || "sin fuente"}</div>
-                    <div className="ui-caption">{order.delivery_zone || "Zona no definida"}</div>
+
+                  <div className="text-right">
+                    <div className="ui-h3">{formatMoney(order.total_amount)}</div>
+                    <div className="ui-caption">{paymentLabel}</div>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3">
-                  <div className="ui-label">Detalle del pedido</div>
+                <div className="flex flex-wrap gap-2">
+                  <div className="ui-chip">
+                    Cliente: {guestName || "Sin nombre"}
+                  </div>
+
+                  {guestPhone ? (
+                    <div className="ui-chip">
+                      Tel: {guestPhone}
+                    </div>
+                  ) : null}
+
+                  <div className="ui-chip ui-chip--brand inline-flex items-center gap-1">
+                    {order.fulfillment_type === "delivery" ? (
+                      <Bike className="h-3.5 w-3.5" />
+                    ) : (
+                      <Store className="h-3.5 w-3.5" />
+                    )}
+                    {fulfillmentLabel}
+                  </div>
+
+                  <div className="ui-chip">
+                    Despacho: {dispatchLabel}
+                  </div>
+
+                  <div className="ui-chip">
+                    Origen: {sourceLabel}
+                  </div>
+
+                  {order.delivery_zone ? (
+                    <div className="ui-chip">
+                      Zona: {order.delivery_zone}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="ui-label">Detalle del pedido</div>
+                    <div className="ui-caption">
+                      {itemCount || detailItems.length} item{(itemCount || detailItems.length) === 1 ? "" : "s"}
+                    </div>
+                  </div>
+
                   {detailItems.length === 0 ? (
                     <div className="mt-2 ui-caption">Este pedido no tiene items visibles.</div>
                   ) : (
-                    <div className="mt-2 space-y-2">
+                    <div className="mt-2 divide-y divide-[var(--ui-border)]">
                       {detailItems.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="ui-body">
+                        <div key={item.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                          <div className="min-w-0">
+                            <div className="ui-body truncate">
                               {item.quantity} x {item.product_name}
                             </div>
                             <div className="ui-caption">{formatMoney(item.unit_price)} c/u</div>
                             {item.notes ? <div className="ui-caption">Nota: {item.notes}</div> : null}
                           </div>
-                          <div className="ui-body font-semibold">{formatMoney(item.total_amount)}</div>
+
+                          <div className="ui-body whitespace-nowrap font-semibold">
+                            {formatMoney(item.total_amount)}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -983,7 +1175,7 @@ export default async function OrdersOperationalPage({
                           />
                         </div>
 
-                        <button type="submit" className="ui-btn ui-btn--brand h-10 px-3 text-sm">
+                        <button type="submit" className="ui-btn ui-btn--brand h-9 px-3 text-sm">
                           Asignar domiciliario
                         </button>
                       </form>
@@ -998,138 +1190,112 @@ export default async function OrdersOperationalPage({
                   </div>
                 ) : null}
 
-                <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="ui-label">Chat cliente</div>
-                      <div className="ui-caption">
-                        {conversation
-                          ? `Estado: ${conversation.status}`
-                          : "El cliente aún no ha abierto chat para este pedido."}
-                      </div>
-                    </div>
-                    {conversation?.last_message_at ? (
-                      <div className="ui-caption">Último: {formatDate(conversation.last_message_at)}</div>
-                    ) : null}
-                  </div>
+                <OrderChatLive
+                  conversation={conversation}
+                  initialMessages={chatMessages}
+                  orderId={order.id}
+                  orderStatus={order.status}
+                  siteId={siteId ?? ""}
+                  sendMessageAction={sendOrderMessageLiveAction}
+                />
 
-                  {conversation ? (
-                    <div className="mt-3 space-y-3">
-                      <div className="max-h-72 space-y-2 overflow-auto pr-1 ui-scrollbar-subtle">
-                        {chatMessages.length === 0 ? (
-                          <div className="ui-caption">Sin mensajes todavía.</div>
-                        ) : (
-                          chatMessages.slice(-12).map((message) => {
-                            const mine = message.author_type === "staff";
-                            return (
-                              <div
-                                key={message.id}
-                                className={`rounded-xl border px-3 py-2 ${
-                                  mine
-                                    ? "ml-8 border-cyan-200 bg-cyan-50"
-                                    : "mr-8 border-[var(--ui-border)] bg-[var(--ui-surface)]"
-                                }`}
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="ui-caption font-semibold">
-                                    {mine ? "Pulso" : message.author_type === "client" ? "Cliente" : "Sistema"}
-                                  </div>
-                                  <div className="ui-caption">{formatDate(message.created_at)}</div>
-                                </div>
-                                <div className="mt-1 ui-body text-sm">{message.body}</div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-
-                      {order.status !== "delivered" && order.status !== "cancelled" ? (
-                        <form action={sendOrderMessageAction} className="flex flex-col gap-2 sm:flex-row">
-                          <input type="hidden" name="conversation_id" value={conversation.id} />
-                          <input type="hidden" name="order_id" value={order.id} />
-                          <input type="hidden" name="site_id" value={siteId ?? ""} />
-                          <input type="hidden" name="view" value={view} />
-                          <input type="hidden" name="fulfillment" value={fulfillment} />
-                          <input
-                            className="ui-input min-h-10 flex-1"
-                            name="body"
-                            placeholder="Responder al cliente"
-                            maxLength={600}
-                          />
-                          <button type="submit" className="ui-btn ui-btn--primary h-10 px-3 text-sm">
-                            Enviar
-                          </button>
-                        </form>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-
-                <form action={updateOperationalOrderAction} className="flex flex-wrap gap-2">
+                <form
+                  action={updateOperationalOrderAction}
+                  className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3"
+                >
                   <input type="hidden" name="order_id" value={order.id} />
                   <input type="hidden" name="site_id" value={siteId ?? ""} />
                   <input type="hidden" name="view" value={view} />
                   <input type="hidden" name="fulfillment" value={fulfillment} />
 
-                  {order.payment_status !== "paid" && order.status !== "cancelled" ? (
-                    <div className="ui-alert ui-alert--warn w-full">
-                      Pago pendiente: este pedido no debe prepararse hasta que Wompi lo confirme.
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="ui-label">Acciones</div>
+                      <div className="ui-caption">Avanza el pedido según su estado operativo.</div>
+                    </div>
+
+                    {operationButtons.length === 0 ? (
+                      <div className="ui-chip">Sin acciones disponibles</div>
+                    ) : null}
+                  </div>
+
+                  {requiresConfirmedOnlinePayment(order) ? (
+                    <div className="ui-alert ui-alert--warn mb-2">
+                      Pago pendiente: este domicilio no debe prepararse hasta que Wompi lo confirme.
                     </div>
                   ) : null}
 
-                  {actionButtons(order).map((button) => {
-                    const toneClass =
-                      button.op === "mark_cancelled" ? "ui-btn--danger" : "ui-btn--primary";
-                    const Icon =
-                      button.op === "mark_delivered"
-                        ? CheckCircle2
-                        : button.op === "mark_cancelled"
-                          ? XCircle
-                          : Clock3;
+                  <div className="flex flex-wrap gap-2">
+                    {operationButtons.map((button) => {
+                      const toneClass =
+                        button.op === "mark_cancelled" ? "ui-btn--danger" : "ui-btn--primary";
+                      const Icon =
+                        button.op === "mark_delivered"
+                          ? CheckCircle2
+                          : button.op === "mark_cancelled"
+                            ? XCircle
+                            : Clock3;
 
-                    return (
-                      <button
-                        key={`${order.id}-${button.op}`}
-                        type="submit"
-                        name="op"
-                        value={button.op}
-                        className={`ui-btn ${toneClass} h-10 px-3 text-sm`}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {button.label}
-                      </button>
-                    );
-                  })}
+                      return (
+                        <button
+                          key={`${order.id}-${button.op}`}
+                          type="submit"
+                          name="op"
+                          value={button.op}
+                          className={`ui-btn ${toneClass} h-9 px-3 text-sm`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {button.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </form>
 
-                <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3">
-                  <div className="ui-label">Bitácora</div>
+                <details className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="ui-label">Bitácora</div>
+                      <div className="ui-caption">
+                        {detailEvents.length === 0
+                          ? "Sin eventos"
+                          : `${detailEvents.length} evento${detailEvents.length === 1 ? "" : "s"}`}
+                      </div>
+                    </div>
+                  </summary>
+
                   {detailEvents.length === 0 ? (
                     <div className="mt-2 ui-caption">Sin eventos registrados.</div>
                   ) : (
-                    <div className="mt-2 space-y-2">
+                    <div className="mt-3 space-y-2">
                       {detailEvents.slice(0, 6).map((event) => (
-                        <div key={event.id} className="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2">
+                        <div
+                          key={event.id}
+                          className="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2"
+                        >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="ui-body text-sm font-semibold">{event.operation}</div>
                             <div className="ui-caption">{formatDate(event.created_at)}</div>
                           </div>
+
                           <div className="ui-caption">
                             {event.actor_name}
                             {event.from_status || event.to_status
-                              ? ` · ${event.from_status || "-"} → ${event.to_status || "-"}`
+                              ? ` · ${formatStatusLabel(event.from_status) || "-"} → ${formatStatusLabel(event.to_status) || "-"}`
                               : ""}
                           </div>
+
                           {event.to_dispatch_status ? (
                             <div className="ui-caption">
-                              Despacho: {event.from_dispatch_status || "-"} → {event.to_dispatch_status}
+                              Despacho: {formatDispatchStatusLabel(event.from_dispatch_status)} →{" "}
+                              {formatDispatchStatusLabel(event.to_dispatch_status)}
                             </div>
                           ) : null}
                         </div>
                       ))}
                     </div>
                   )}
-                </div>
+                </details>
               </div>
             );
           })}
