@@ -691,3 +691,74 @@ input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+/* =========================================================
+   Vento OS standard app switcher
+   Compatibilidad visual estándar para componentes
+   app-switcher.tsx server-driven.
+   ========================================================= */
+
+.ui-app-glyph {
+  min-height: 104px;
+  border-radius: 14px;
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(247, 248, 250, 0.94) 100%);
+  padding: 12px;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, opacity 140ms ease;
+  color: var(--ui-text);
+  text-decoration: none;
+}
+
+.ui-app-glyph--active {
+  cursor: pointer;
+}
+
+.ui-app-glyph--active:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--ui-brand) 34%, white);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--ui-brand) 24%, transparent);
+}
+
+.ui-app-glyph--soon {
+  opacity: 0.72;
+  filter: saturate(0.6);
+}
+
+.ui-app-glyph-icon-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-app-glyph-name {
+  margin-top: 12px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.ui-app-icon,
+.ui-app-icon-fallback {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+
+.ui-app-icon {
+  object-fit: cover;
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  background: #fff;
+}
+
+.ui-app-icon-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--ui-brand);
+}
+

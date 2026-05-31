@@ -97,11 +97,12 @@ function AppTile({
         aria-disabled="true"
         title={
           app.access === "disabled"
-            ? "Tu rol no tiene acceso a esta aplicación."
+            ? "Tu rol no tiene acceso a esta aplicacion."
             : app.description
         }
       >
         <div className="ui-app-glyph-icon-wrap">{logoNode}</div>
+
         <div className="ui-app-glyph-name">{app.name}</div>
 
         <div className="mt-1">
@@ -118,6 +119,7 @@ function AppTile({
       className="ui-app-glyph ui-app-glyph--active"
     >
       <div className="ui-app-glyph-icon-wrap">{logoNode}</div>
+
       <div className="ui-app-glyph-name">{app.name}</div>
 
       <div className="mt-1">
@@ -154,6 +156,20 @@ export function AppSwitcher({ appSwitcherItems }: AppSwitcherProps) {
       document.removeEventListener("mousedown", onDocClick);
     };
   }, [open]);
+
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", onEscape);
+
+    return () => {
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, []);
 
   return (
     <div ref={rootRef} className="relative">
