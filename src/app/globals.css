@@ -694,17 +694,43 @@ input[type="number"]::-webkit-inner-spin-button {
 
 /* =========================================================
    Vento OS standard app switcher
-   Compatibilidad visual estándar para componentes
-   app-switcher.tsx server-driven.
+   Mismo layout estructural de VISO/NEXO/ORIGO.
+   Mantiene identidad PULSO por variables de color/logo.
    ========================================================= */
 
+.ui-app-launcher {
+  border: 1px solid var(--ui-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, var(--ui-surface-2) 100%);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--ui-shadow-2);
+  overflow: hidden;
+}
+
+.ui-app-launcher-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 251, 252, 0.98) 100%);
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.ui-app-launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .ui-app-glyph {
-  min-height: 104px;
-  border-radius: 14px;
-  border: 1px solid rgba(229, 231, 235, 0.95);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(247, 248, 250, 0.94) 100%);
-  padding: 12px;
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, opacity 140ms ease;
+  min-height: 114px;
+  border-radius: 12px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+  transition: background-color 140ms ease, transform 140ms ease, opacity 140ms ease;
   color: var(--ui-text);
   text-decoration: none;
 }
@@ -714,51 +740,95 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .ui-app-glyph--active:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--ui-brand) 34%, white);
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--ui-brand) 24%, transparent);
+  background: rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
 }
 
 .ui-app-glyph--soon {
-  opacity: 0.72;
-  filter: saturate(0.6);
+  opacity: 0.65;
+  filter: saturate(0.55);
 }
 
 .ui-app-glyph-icon-wrap {
-  display: flex;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
 }
 
 .ui-app-glyph-name {
-  margin-top: 12px;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
+  margin-top: 8px;
+  font-size: 0.95rem;
+  line-height: 1.2;
   font-weight: 600;
   color: var(--ui-text);
 }
 
+.ui-app-logo,
+.ui-app-logo-fallback {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+}
+
+.ui-app-logo {
+  object-fit: contain;
+}
+
+.ui-app-logo-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--ui-brand);
+  border-radius: 10px;
+}
+
 .ui-app-icon,
 .ui-app-icon-fallback {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
 }
 
 .ui-app-icon {
-  object-fit: cover;
-  border: 1px solid rgba(229, 231, 235, 0.8);
-  background: #fff;
+  object-fit: contain;
 }
 
 .ui-app-icon-fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.82rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
   font-weight: 700;
   color: #fff;
   background: var(--ui-brand);
+}
+
+.ui-app-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  border: 1px solid transparent;
+}
+
+.ui-app-status--active {
+  color: #155e36;
+  background: rgba(22, 163, 74, 0.12);
+  border-color: rgba(22, 163, 74, 0.24);
+}
+
+.ui-app-status--soon {
+  color: var(--ui-muted);
+  background: rgba(15, 23, 42, 0.06);
+  border-color: rgba(15, 23, 42, 0.12);
 }
 
