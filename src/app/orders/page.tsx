@@ -67,9 +67,33 @@ type OrderItemRow = {
   notes: string | null;
 };
 
+type OrderItemOptionRow = {
+  id: string;
+  order_item_id: string;
+  option_group_id: string | null;
+  option_id: string | null;
+  group_name: string;
+  option_name: string;
+  quantity: number | string | null;
+  price_delta_amount: number | string | null;
+  total_delta_amount: number | string | null;
+  metadata: Record<string, unknown> | null;
+};
+
 type ProductRow = {
   id: string;
   name: string | null;
+};
+
+type OrderItemOptionView = {
+  id: string;
+  order_item_id: string;
+  group_name: string;
+  option_name: string;
+  quantity: number;
+  price_delta_amount: number;
+  total_delta_amount: number;
+  effect_type: string | null;
 };
 
 type OrderItemView = {
@@ -81,6 +105,7 @@ type OrderItemView = {
   unit_price: number;
   total_amount: number;
   notes: string | null;
+  options: OrderItemOptionView[];
 };
 
 type OrderStatusEventRow = {
@@ -387,7 +412,8 @@ function actionButtons(order: OrderRow) {
 
 function mapOrderItems(
   rawItems: OrderItemRow[],
-  productsById: Map<string, string>
+  productsById: Map<string, string>,
+  optionsByItemId: Map<string, OrderItemOptionView[]>
 ): Record<string, OrderItemView[]> {
   const byOrder: Record<string, OrderItemView[]> = {};
 
@@ -401,6 +427,7 @@ function mapOrderItems(
       unit_price: parseMoney(item.unit_price),
       total_amount: parseMoney(item.total_amount),
       notes: item.notes,
+      options: optionsByItemId.get(item.id) ?? [],
     };
 
     if (!byOrder[item.order_id]) {
@@ -412,6 +439,37 @@ function mapOrderItems(
   });
 
   return byOrder;
+}
+
+function mapOrderItemOptions(rawOptions: OrderItemOptionRow[]): Map<string, OrderItemOptionView[]> {
+  const byItemId = new Map<string, OrderItemOptionView[]>();
+
+  rawOptions.forEach((option) => {
+    const metadataEffect = option.metadata?.effect_type;
+    const next: OrderItemOptionView = {
+      id: option.id,
+      order_item_id: option.order_item_id,
+      group_name: option.group_name,
+      option_name: option.option_name,
+      quantity: parseMoney(option.quantity),
+      price_delta_amount: parseMoney(option.price_delta_amount),
+      total_delta_amount: parseMoney(option.total_delta_amount),
+      effect_type: typeof metadataEffect === "string" ? metadataEffect : null,
+    };
+
+    const current = byItemId.get(option.order_item_id) ?? [];
+    current.push(next);
+    byItemId.set(option.order_item_id, current);
+  });
+
+  return byItemId;
+}
+
+function formatOptionEffectLabel(effectType: string | null) {
+  if (effectType === "additive") return "Extra";
+  if (effectType === "replacement") return "Cambio";
+  if (effectType === "removal") return "Sin";
+  return "Opcion";
 }
 
 function formatOperationLabel(operation: string) {
@@ -806,6 +864,7 @@ export default async function OrdersOperationalPage({
       const rawItems = (orderItemsData ?? []) as OrderItemRow[];
       const productIds = Array.from(new Set(rawItems.map((item) => item.product_id).filter(Boolean)));
       const productNameById = new Map<string, string>();
+      let optionsByItemId = new Map<string, OrderItemOptionView[]>();
 
       if (productIds.length > 0) {
         const { data: productsData } = await supabase
@@ -819,7 +878,24 @@ export default async function OrdersOperationalPage({
         });
       }
 
-      orderItemsByOrder = mapOrderItems(rawItems, productNameById);
+      const itemIds = rawItems.map((item) => item.id).filter(Boolean);
+
+      if (itemIds.length > 0) {
+        const { data: optionRows, error: optionsError } = await supabase
+          .from("order_item_options")
+          .select(
+            "id,order_item_id,option_group_id,option_id,group_name,option_name,quantity,price_delta_amount,total_delta_amount,metadata"
+          )
+          .in("order_item_id", itemIds);
+
+        if (optionsError) {
+          orderItemsError = optionsError.message;
+        } else {
+          optionsByItemId = mapOrderItemOptions((optionRows ?? []) as OrderItemOptionRow[]);
+        }
+      }
+
+      orderItemsByOrder = mapOrderItems(rawItems, productNameById, optionsByItemId);
     }
 
     const { data: orderEventsData, error: eventsError } = await supabase
@@ -1079,9 +1155,13 @@ export default async function OrdersOperationalPage({
             const sourceLabel = formatSourceLabel(order.source);
             const operationButtons = actionButtons(order);
             const itemCount = detailItems.reduce((sum, item) => sum + item.quantity, 0);
+            const paymentBlocked = requiresConfirmedOnlinePayment(order);
 
             return (
-              <div key={order.id} className="ui-panel space-y-3">
+              <div
+                key={order.id}
+                className={`ui-panel space-y-3 ${paymentBlocked ? "border-amber-200 bg-amber-50/50 shadow-[0_18px_45px_rgba(245,158,11,0.14)]" : ""}`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1154,6 +1234,19 @@ export default async function OrdersOperationalPage({
                               {item.quantity} x {item.product_name}
                             </div>
                             <div className="ui-caption">{formatMoney(item.unit_price)} c/u</div>
+                            {item.options.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {item.options.map((option) => (
+                                  <div
+                                    key={option.id}
+                                    className="rounded-full border border-cyan-100 bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800"
+                                  >
+                                    {formatOptionEffectLabel(option.effect_type)} · {option.group_name}: {option.option_name}
+                                    {option.price_delta_amount > 0 ? ` · +${formatMoney(option.price_delta_amount)}` : ""}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                             {item.notes ? <div className="ui-caption">Nota: {item.notes}</div> : null}
                           </div>
 
@@ -1253,7 +1346,7 @@ export default async function OrdersOperationalPage({
                     ) : null}
                   </div>
 
-                  {requiresConfirmedOnlinePayment(order) ? (
+                  {paymentBlocked ? (
                     <div className="ui-alert ui-alert--warn mb-2">
                       Pago pendiente: este domicilio no debe prepararse hasta que Wompi lo confirme.
                     </div>
