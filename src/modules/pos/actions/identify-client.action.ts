@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
@@ -46,7 +46,7 @@ export async function identifyClientAction(
     if (!userId) {
       return {
         success: false,
-        error: "Codigo invalido. Usa VENTO:<uuid> o UUID.",
+        error: "Codigo inválido. Usa VENTO:<uuid> o UUID.",
       };
     }
 

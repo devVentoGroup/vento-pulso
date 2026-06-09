@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { Camera, RefreshCw, VideoOff } from "lucide-react";
@@ -269,7 +269,7 @@ export function CameraQRScanner({ active, onDetected }: CameraQRScannerProps) {
 
       {starting ? <div className="mt-2 ui-body-muted">Iniciando camara...</div> : null}
       {!starting && scanning && !error ? (
-        <div className="mt-2 ui-body-muted">Escaneando QR automaticamente...</div>
+        <div className="mt-2 ui-body-muted">Escaneando QR automáticamente...</div>
       ) : null}
 
       {error ? (

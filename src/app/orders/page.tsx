@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   Bike,
@@ -532,7 +532,7 @@ export async function updateOperationalOrderAction(formData: FormData) {
   const fulfillment = asFulfillmentFilter(readFormString(formData, "fulfillment"));
 
   if (!UUID_REGEX.test(orderId)) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Pedido invalido." }));
+    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Pedido inválido." }));
   }
 
   if (!UUID_REGEX.test(siteId)) {
@@ -629,7 +629,7 @@ export async function assignDispatchOrderAction(formData: FormData) {
   const dispatchReference = readFormString(formData, "dispatch_reference");
 
   if (!UUID_REGEX.test(orderId)) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Pedido invalido." }));
+    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Pedido inválido." }));
   }
 
   if (!UUID_REGEX.test(siteId)) {
@@ -700,7 +700,7 @@ export async function sendOrderMessageAction(formData: FormData) {
   const body = readFormString(formData, "body");
 
   if (!UUID_REGEX.test(conversationId) || !UUID_REGEX.test(orderId) || !UUID_REGEX.test(siteId)) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Chat invalido." }));
+    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Chat inválido." }));
   }
 
   if (!body) {
