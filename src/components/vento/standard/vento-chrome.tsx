@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -74,6 +74,7 @@ const APP_ENTITY =
     | "pulso"
     | "viso"
     | "origo"
+    | "numera"
     | "anima"
     | "aura") ?? "pulso";
 
@@ -450,3 +451,4 @@ export function VentoChrome({
     </div>
   );
 }
+

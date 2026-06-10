@@ -77,6 +77,7 @@ const APP_ENTITY =
     | "pulso"
     | "viso"
     | "origo"
+    | "numera"
     | "anima"
     | "aura") ?? "pulso";
 
@@ -134,6 +135,16 @@ const APP_SWITCHER_ITEMS: Omit<AppSwitcherItem, "access">[] = [
     logoSrc: "/apps/pulso.svg",
     brandColor: "#EF4444",
     href: "https://pulso.ventogroup.co",
+    status: "active",
+    group: "Operacion",
+  },
+  {
+    id: "numera",
+    name: "NUMERA",
+    description: "Economia y rentabilidad.",
+    logoSrc: "/apps/numera.svg",
+    brandColor: "#2563EB",
+    href: "https://numera.ventogroup.co",
     status: "active",
     group: "Operacion",
   },
@@ -455,3 +466,5 @@ export async function VentoShell({ children }: { children: React.ReactNode }) {
     </VentoChrome>
   );
 }
+
+
