@@ -62,6 +62,8 @@ type VentoChromeProps = {
   email?: string | null;
   sites: SiteOption[];
   activeSiteId: string;
+  operationalContextLabel?: string | null;
+  operationalContextDescription?: string | null;
   appSwitcherItems: AppSwitcherItem[];
   navGroups: NavGroup[];
 };
@@ -252,6 +254,42 @@ function SidebarLink({
   );
 }
 
+function SidebarContextCard({
+  title,
+  value,
+  description,
+  collapsed,
+}: {
+  title: string;
+  value?: string | null;
+  description?: string | null;
+  collapsed: boolean;
+}) {
+  if (!value) return null;
+
+  return (
+    <div
+      className={`rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] px-4 py-3 shadow-[var(--ui-shadow-soft)] ${
+        collapsed ? "lg:!hidden" : ""
+      }`}
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-muted)]">
+        {title}
+      </div>
+
+      <div className="mt-1 text-sm font-semibold text-[var(--ui-text)]">
+        {value}
+      </div>
+
+      {description ? (
+        <div className="mt-1 text-xs leading-snug text-[var(--ui-muted)]">
+          {description}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function VentoChrome({
   children,
   displayName,
@@ -259,6 +297,8 @@ export function VentoChrome({
   email,
   sites,
   activeSiteId,
+  operationalContextLabel,
+  operationalContextDescription,
   appSwitcherItems,
   navGroups,
 }: VentoChromeProps) {
@@ -355,15 +395,18 @@ export function VentoChrome({
             </button>
           </div>
 
-          <div className={`rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] px-4 py-3 shadow-[var(--ui-shadow-soft)] ${sidebarCollapsed ? "lg:!hidden" : ""}`}>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-muted)]">
-              Sede activa
-            </div>
+          <SidebarContextCard
+            title="Sede activa"
+            value={currentSiteLabel}
+            collapsed={sidebarCollapsed}
+          />
 
-            <div className="mt-1 text-sm font-semibold text-[var(--ui-text)]">
-              {currentSiteLabel}
-            </div>
-          </div>
+          <SidebarContextCard
+            title="Contexto operativo"
+            value={operationalContextLabel}
+            description={operationalContextDescription}
+            collapsed={sidebarCollapsed}
+          />
 
           <nav className={`flex flex-1 flex-col gap-4 overflow-y-auto pr-1 ${sidebarCollapsed ? "lg:items-center lg:pr-0" : ""}`}>
             {navGroups.length === 0 ? (
