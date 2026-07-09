@@ -19,6 +19,18 @@ type GuardOptions = {
   requireAppAccessPermission?: boolean;
 };
 
+type SharedDeviceRow = {
+  id: string;
+  site_id: string | null;
+  area_id: string | null;
+  default_app_code: string | null;
+  navigation_role: string | null;
+};
+
+type SharedDeviceAccess = SharedDeviceRow & {
+  appAllowed: boolean;
+};
+
 async function resolveEffectiveSiteId(
   client: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -46,6 +58,65 @@ async function resolveEffectiveSiteId(
   return employee?.site_id ? String(employee.site_id) : null;
 }
 
+async function resolveSharedDeviceAccess(
+  client: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  appId: string,
+): Promise<SharedDeviceAccess | null> {
+  const { data: device, error: deviceError } = await client
+    .from("shared_operational_devices")
+    .select("id,site_id,area_id,default_app_code,navigation_role")
+    .eq("auth_user_id", userId)
+    .eq("is_active", true)
+    .eq("activation_status", "active")
+    .maybeSingle();
+
+  if (deviceError || !device) return null;
+
+  const { data: appRow } = await client
+    .from("shared_operational_device_apps")
+    .select("app_code")
+    .eq("device_id", device.id)
+    .eq("app_code", appId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  return {
+    ...(device as SharedDeviceRow),
+    appAllowed: Boolean(appRow),
+  };
+}
+
+function isAppAccessCode(appId: string, code: string) {
+  return normalizePermissionCode(appId, code) === `${appId}.access`;
+}
+
+async function isSharedDevicePermissionAllowed({
+  client,
+  sharedDevice,
+  appId,
+  code,
+}: {
+  client: Awaited<ReturnType<typeof createClient>>;
+  sharedDevice: SharedDeviceAccess;
+  appId: string;
+  code: string;
+}) {
+  if (!sharedDevice.appAllowed) return false;
+
+  if (isAppAccessCode(appId, code)) {
+    return true;
+  }
+
+  const navigationRole = String(sharedDevice.navigation_role ?? "").trim();
+  if (!navigationRole) return false;
+
+  return isPermissionAllowedForRole(client, navigationRole, appId, code, {
+    siteId: sharedDevice.site_id ?? null,
+    areaId: sharedDevice.area_id ?? null,
+  });
+}
+
 export async function requireAppAccess({
   appId,
   returnTo,
@@ -62,6 +133,64 @@ export async function requireAppAccess({
 
   if (!user) {
     redirect(await buildShellLoginUrl(returnTo));
+  }
+
+  const sharedDevice = await resolveSharedDeviceAccess(client, user.id, appId);
+
+  if (sharedDevice) {
+    const effectiveSiteId = siteId ?? sharedDevice.site_id ?? null;
+    const effectiveAreaId = areaId ?? sharedDevice.area_id ?? null;
+
+    if (requireAppAccessPermission && !sharedDevice.appAllowed) {
+      const qs = new URLSearchParams();
+      qs.set("returnTo", returnTo);
+      qs.set("reason", "shared_device_app_not_allowed");
+      qs.set("permission", `${appId}.access`);
+      redirect(`/no-access?${qs.toString()}`);
+    }
+
+    const permissionCodes = Array.isArray(permissionCode)
+      ? permissionCode.filter(Boolean)
+      : permissionCode
+        ? [permissionCode]
+        : [];
+
+    if (permissionCodes.length) {
+      const normalizedCodes = permissionCodes.map((code) =>
+        normalizePermissionCode(appId, code)
+      );
+
+      const checks = await Promise.all(
+        normalizedCodes.map((code) =>
+          isSharedDevicePermissionAllowed({
+            client,
+            sharedDevice: {
+              ...sharedDevice,
+              site_id: effectiveSiteId,
+              area_id: effectiveAreaId,
+            },
+            appId,
+            code,
+          })
+        )
+      );
+
+      const deniedIndex = checks.findIndex((allowed) => !allowed);
+      if (deniedIndex !== -1) {
+        const qs = new URLSearchParams();
+        qs.set("returnTo", returnTo);
+        qs.set("reason", "shared_device_no_permission");
+        qs.set("permission", String(normalizedCodes[deniedIndex] ?? ""));
+        redirect(`/no-access?${qs.toString()}`);
+      }
+    }
+
+    return {
+      supabase: client,
+      user,
+      siteId: effectiveSiteId,
+      sharedDevice,
+    };
   }
 
   const effectiveSiteId = await resolveEffectiveSiteId(client, user.id, siteId ?? null);
