@@ -55,6 +55,21 @@ type NavGroup = {
   items: NavItem[];
 };
 
+type OperatingGate = {
+  mode:
+    | "anonymous"
+    | "anima"
+    | "privileged_bypass"
+    | "personal_active_work"
+    | "personal_no_work"
+    | "shared_device";
+  isBlocked: boolean;
+  title: string;
+  description: string;
+  actionHref: string;
+  actionLabel: string;
+};
+
 type VentoChromeProps = {
   children: React.ReactNode;
   displayName: string;
@@ -64,6 +79,7 @@ type VentoChromeProps = {
   activeSiteId: string;
   operationalContextLabel?: string | null;
   operationalContextDescription?: string | null;
+  operatingGate?: OperatingGate | null;
   appSwitcherItems: AppSwitcherItem[];
   navGroups: NavGroup[];
 };
@@ -259,18 +275,29 @@ function SidebarContextCard({
   value,
   description,
   collapsed,
+  tone = "default",
 }: {
   title: string;
   value?: string | null;
   description?: string | null;
   collapsed: boolean;
+  tone?: "default" | "active" | "warning";
 }) {
   if (!value) return null;
 
+  const isActiveTone = tone === "active";
+  const isWarningTone = tone === "warning";
+
   return (
     <div
-      className={`rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] px-4 py-3 shadow-[var(--ui-shadow-soft)] ${
+      className={`rounded-2xl border px-4 py-3 shadow-[var(--ui-shadow-soft)] ${
         collapsed ? "lg:!hidden" : ""
+      } ${
+        isActiveTone
+          ? "border-[color-mix(in_srgb,var(--ui-accent)_34%,var(--ui-border))] bg-[color-mix(in_srgb,var(--ui-accent)_8%,var(--ui-surface))]"
+          : isWarningTone
+            ? "border-amber-200 bg-amber-50"
+            : "border-[var(--ui-border)] bg-[var(--ui-surface)]"
       }`}
     >
       <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-muted)]">
@@ -290,6 +317,48 @@ function SidebarContextCard({
   );
 }
 
+function OperatingGateBlock({ gate }: { gate: OperatingGate }) {
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-11rem)] w-full max-w-3xl items-center justify-center">
+      <section className="w-full rounded-[var(--ui-radius-card)] border border-amber-200 bg-amber-50 p-6 shadow-[var(--ui-shadow-soft)] sm:p-8">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-200">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M12 3l10 18H2z" />
+              <path d="M12 9v5" />
+              <path d="M12 17h.01" />
+            </svg>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">
+              Estado laboral requerido
+            </p>
+
+            <h1 className="mt-2 text-2xl font-semibold text-amber-950">
+              {gate.title}
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-amber-900">
+              {gate.description}
+            </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link href={gate.actionHref} className="ui-btn ui-btn--brand">
+                {gate.actionLabel}
+              </Link>
+
+              <Link href="https://os.ventogroup.co" className="ui-btn ui-btn--ghost">
+                Volver al Hub
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function VentoChrome({
   children,
   displayName,
@@ -299,6 +368,7 @@ export function VentoChrome({
   activeSiteId,
   operationalContextLabel,
   operationalContextDescription,
+  operatingGate,
   appSwitcherItems,
   navGroups,
 }: VentoChromeProps) {
@@ -327,6 +397,11 @@ export function VentoChrome({
   const currentSiteId = searchParams.get("site_id") ?? activeSiteId ?? "";
   const currentSite = sites.find((site) => site.id === currentSiteId);
   const currentSiteLabel = currentSite?.name ?? currentSiteId ?? "Sin sede";
+  const contextTone = operatingGate?.isBlocked
+    ? "warning"
+    : operationalContextLabel
+      ? "active"
+      : "default";
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -406,6 +481,7 @@ export function VentoChrome({
             value={operationalContextLabel}
             description={operationalContextDescription}
             collapsed={sidebarCollapsed}
+            tone={contextTone}
           />
 
           <nav className={`flex flex-1 flex-col gap-4 overflow-y-auto pr-1 ${sidebarCollapsed ? "lg:items-center lg:pr-0" : ""}`}>
@@ -487,7 +563,11 @@ export function VentoChrome({
           </header>
 
           <main className="ui-main min-w-0 flex-1 px-6 py-8 sm:px-8 sm:py-10">
-            {children}
+            {operatingGate?.isBlocked ? (
+              <OperatingGateBlock gate={operatingGate} />
+            ) : (
+              children
+            )}
           </main>
         </div>
       </div>
