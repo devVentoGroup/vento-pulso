@@ -49,6 +49,29 @@ type OrderRow = {
   dispatch_reference: string | null;
 };
 
+type OrderBillingRequestRow = {
+  id: string;
+  order_id: string;
+  client_id: string;
+  site_id: string;
+  legal_name: string;
+  document_type: string;
+  document_number: string;
+  verification_digit: string | null;
+  billing_email: string;
+  status: string;
+  provider: string | null;
+  provider_reference: string | null;
+  invoice_number: string | null;
+  cufe: string | null;
+  pdf_url: string | null;
+  xml_url: string | null;
+  error_message: string | null;
+  requested_at: string;
+  submitted_at: string | null;
+  issued_at: string | null;
+};
+
 type OrderItemRow = {
   id: string;
   order_id: string;
@@ -759,6 +782,8 @@ export default async function OrdersOperationalPage({
   const orders = (data ?? []) as OrderRow[];
   const orderIds = orders.map((order) => order.id);
 
+  let billingByOrder: Record<string, OrderBillingRequestRow> = {};
+  let billingError: string | null = null;
   let orderItemsByOrder: Record<string, OrderItemView[]> = {};
   let orderItemsError: string | null = null;
   let orderEventsByOrder: Record<string, OrderStatusEventView[]> = {};
@@ -768,6 +793,21 @@ export default async function OrdersOperationalPage({
   let orderMessagesError: string | null = null;
 
   if (orderIds.length > 0) {
+    const { data: billingData, error: billingFetchError } = await supabase
+      .from("order_billing_requests")
+      .select(
+        "id,order_id,client_id,site_id,legal_name,document_type,document_number,verification_digit,billing_email,status,provider,provider_reference,invoice_number,cufe,pdf_url,xml_url,error_message,requested_at,submitted_at,issued_at"
+      )
+      .in("order_id", orderIds);
+
+    if (billingFetchError) {
+      billingError = billingFetchError.message;
+    } else {
+      billingByOrder = Object.fromEntries(
+        ((billingData ?? []) as OrderBillingRequestRow[]).map((billing) => [billing.order_id, billing])
+      );
+    }
+
     const { data: orderItemsData, error: itemsError } = await supabase
       .from("order_items")
       .select("id,order_id,product_id,quantity,unit_price,total_amount,notes")
@@ -906,6 +946,7 @@ export default async function OrdersOperationalPage({
 
     return {
       order,
+      billing: billingByOrder[order.id] ?? null,
       items,
       events: orderEventsByOrder[order.id] ?? [],
       conversation,
@@ -974,6 +1015,9 @@ export default async function OrdersOperationalPage({
       ) : null}
       {orderMessagesError ? (
         <div className="ui-alert ui-alert--warn">No se pudo cargar el chat: {orderMessagesError}</div>
+      ) : null}
+      {billingError ? (
+        <div className="ui-alert ui-alert--warn">No se pudieron cargar los datos de facturación: {billingError}</div>
       ) : null}
 
       <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
