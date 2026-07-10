@@ -9,7 +9,7 @@ export default async function PulsoScannerPage({
   const params = await searchParams;
   const returnTo = params?.site_id ? `/?site_id=${params.site_id}` : "/";
 
-  const { siteId: resolvedSiteId } = await requireAppAccess({
+  const { siteId: resolvedSiteId, operationalSession } = await requireAppAccess({
     appId: "pulso",
     returnTo,
     siteId: params?.site_id ?? null,
@@ -19,6 +19,6 @@ export default async function PulsoScannerPage({
 
   const siteId = params?.site_id ?? resolvedSiteId ?? "";
 
-  return <ScannerPage siteId={siteId} />;
+  return <ScannerPage siteId={siteId} requiresSharedDeviceActorSignature={operationalSession.isSharedDevice} />;
 }
 

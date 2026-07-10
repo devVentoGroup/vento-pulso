@@ -14,6 +14,7 @@ export interface AwardPointsInput {
   externalRef: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  sharedActorPin?: string;
 }
 
 export interface AwardPointsResult {

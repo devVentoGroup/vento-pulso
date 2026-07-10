@@ -8,9 +8,10 @@ import type { QRScanResult } from "@/modules/pos/types";
 
 type ScannerPageProps = {
   siteId: string;
+  requiresSharedDeviceActorSignature?: boolean;
 };
 
-export function ScannerPage({ siteId }: ScannerPageProps) {
+export function ScannerPage({ siteId, requiresSharedDeviceActorSignature = false }: ScannerPageProps) {
   const [selectedClient, setSelectedClient] = useState<QRScanResult | null>(null);
 
   const statusText = useMemo(() => {
@@ -43,6 +44,8 @@ export function ScannerPage({ siteId }: ScannerPageProps) {
           onScan={(result) => setSelectedClient(result)}
           onClear={() => setSelectedClient(null)}
           siteId={siteId}
+        
+          requiresSharedDeviceActorSignature={requiresSharedDeviceActorSignature}
         />
 
         <div className="ui-panel">

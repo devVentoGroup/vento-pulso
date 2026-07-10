@@ -13,13 +13,15 @@ interface QRScannerProps {
   selectedClient: QRScanResult | null;
   onClear: () => void;
   siteId: string;
+  requiresSharedDeviceActorSignature?: boolean;
 }
 
-export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScannerProps) {
+export function QRScanner({ onScan, selectedClient, onClear, siteId, requiresSharedDeviceActorSignature = false }: QRScannerProps) {
   const [mode, setMode] = useState<ScannerMode>("identification");
   const [isScanning, setIsScanning] = useState(false);
   const [qrInput, setQrInput] = useState("");
   const [amountCop, setAmountCop] = useState("");
+  const [sharedActorPin, setSharedActorPin] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,7 +72,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
     setIsScanning(true);
     try {
       if (mode === "redemption") {
-        const redemptionResult = await processRedemptionAction(rawCode.trim());
+        const redemptionResult = await processRedemptionAction(rawCode.trim(), undefined, sharedActorPin);
         if (!redemptionResult.success) {
           setError(redemptionResult.error || "Error al validar la redencion");
           return;
@@ -128,6 +130,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
         amountCop: amount,
         externalRef: autoExternalRef,
         description: `Compra registrada en Pulso (${autoExternalRef})`,
+        sharedActorPin,
         metadata: {
           source: "pulso",
           flow: "external_pos",
@@ -154,6 +157,7 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
         `Puntos otorgados: ${result.points_awarded ?? 0}. Nuevo saldo: ${result.new_balance ?? "-"}`
       );
       setAmountCop("");
+      setSharedActorPin("");
     } catch (err) {
       console.error("Error otorgando puntos:", err);
       setError("Error inesperado al otorgar puntos");
@@ -263,6 +267,25 @@ export function QRScanner({ onScan, selectedClient, onClear, siteId }: QRScanner
               onChange={(e) => setAmountCop(e.target.value.replace(/[^0-9]/g, ""))}
             />
           </div>
+
+          {requiresSharedDeviceActorSignature ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+              <label className="grid gap-1 text-xs font-semibold text-amber-900" htmlFor="shared_actor_pin">
+                Firma del trabajador
+                <input
+                  id="shared_actor_pin"
+                  name="shared_actor_pin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  className="ui-input bg-white"
+                  value={sharedActorPin}
+                  onChange={(event) => setSharedActorPin(event.target.value)}
+                  required
+                />
+              </label>
+            </div>
+          ) : null}
 
           <div className="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 text-xs text-[var(--ui-muted)]">
             La referencia externa se genera automaticamente al confirmar.
