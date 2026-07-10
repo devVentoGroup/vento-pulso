@@ -3,7 +3,9 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
+        "predev": "python3 scripts/apply-order-modal-operational-improvements.py",
         "dev": "next dev",
+        "prebuild": "python3 scripts/apply-order-modal-operational-improvements.py",
         "build": "next build",
         "start": "next start",
         "lint": "eslint",
