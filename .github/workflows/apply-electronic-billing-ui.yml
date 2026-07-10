@@ -1,49 +1,13 @@
-name: Apply electronic billing UI
+name: Apply electronic billing UI (disabled)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - scripts/apply-electronic-billing-ui-fixed.mjs
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Apply Pulso billing UI
-        run: |
-          set +e
-          node scripts/apply-electronic-billing-ui-fixed.mjs > /tmp/billing-patch.log 2>&1
-          status=$?
-          cat /tmp/billing-patch.log
-          if [ "$status" -ne 0 ]; then
-            cp /tmp/billing-patch.log scripts/apply-electronic-billing-ui.error.log
-          else
-            rm -f scripts/apply-electronic-billing-ui.error.log
-          fi
-          exit 0
-
-      - name: Commit changes or diagnostics
-        run: |
-          git config user.name "vento-billing-bot"
-          git config user.email "billing-bot@ventogroup.co"
-          git add -A src/app/orders/page.tsx src/app/orders/orders-board.tsx scripts/apply-electronic-billing-ui.error.log 2>/dev/null || true
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          if [ -f scripts/apply-electronic-billing-ui.error.log ]; then
-            git commit -m "chore: record electronic billing UI patch error"
-          else
-            git commit -m "feat(billing): show electronic invoice requests in Pulso"
-          fi
-          git push origin HEAD:main
+      - run: echo "One-time Pulso billing patch already applied."
