@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - scripts/apply-electronic-billing-ui.mjs
+      - scripts/apply-electronic-billing-ui.trigger
 
 permissions:
   contents: write
