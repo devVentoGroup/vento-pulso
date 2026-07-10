@@ -1,0 +1,32 @@
+name: Apply electronic billing UI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/apply-electronic-billing-ui.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply Pulso billing UI
+        run: node scripts/apply-electronic-billing-ui.mjs
+
+      - name: Commit changes
+        run: |
+          git config user.name "vento-billing-bot"
+          git config user.email "billing-bot@ventogroup.co"
+          git add src/app/orders/page.tsx src/app/orders/orders-board.tsx
+          git commit -m "feat(billing): show electronic invoice requests in Pulso"
+          git push origin HEAD:main
