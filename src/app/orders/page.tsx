@@ -1,17 +1,9 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  Bike,
-  CheckCircle2,
-  Clock3,
-  PackageCheck,
-  MapPin,
-  Store,
-  XCircle,
-} from "lucide-react";
+import { PackageCheck } from "lucide-react";
 
 import { requireAppAccess } from "@/lib/auth/guard";
-import { OrderChatLive } from "./order-chat-live";
+import { OrdersBoard } from "./orders-board";
 import { OrdersLiveBridge } from "./orders-live-bridge";
 
 type PageSearchParams = {
@@ -145,14 +137,8 @@ type OrderMessageRow = {
 };
 
 type SendOrderMessageLiveResult =
-  | {
-    ok: true;
-    message: OrderMessageRow;
-  }
-  | {
-    ok: false;
-    error: string;
-  };
+  | { ok: true; message: OrderMessageRow }
+  | { ok: false; error: string };
 
 type EmployeeRow = {
   id: string;
@@ -209,6 +195,7 @@ const STATUS_TONE: Record<string, string> = {
   delivered: "ui-chip ui-chip--success",
   cancelled: "ui-chip",
 };
+
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
   paid: "Pagado",
   pending: "Pendiente",
@@ -254,8 +241,7 @@ function readFormString(formData: FormData, key: string) {
 
 function parseMoney(value: number | string | null | undefined) {
   const parsed = Number(value ?? 0);
-  if (!Number.isFinite(parsed)) return 0;
-  return parsed;
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function buildOrdersHref(params: {
@@ -275,31 +261,6 @@ function buildOrdersHref(params: {
   return query ? `/orders?${query}` : "/orders";
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "Sin fecha";
-  try {
-    return new Intl.DateTimeFormat("es-CO", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
-
-function formatMoney(value: number | string | null) {
-  return new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  }).format(parseMoney(value));
-}
-
-function formatStatusLabel(value: string | null | undefined) {
-  if (!value) return "Sin estado";
-  return STATUS_LABELS[value] || value;
-}
-
 function formatPaymentStatusLabel(value: string | null | undefined) {
   if (!value) return "Sin pagar";
   return PAYMENT_STATUS_LABELS[value] || value;
@@ -315,13 +276,16 @@ function formatSourceLabel(value: string | null | undefined) {
   return SOURCE_LABELS[value] || value;
 }
 
-function requiresConfirmedOnlinePayment(order: Pick<OrderRow, "fulfillment_type" | "payment_status" | "status">) {
+function requiresConfirmedOnlinePayment(
+  order: Pick<OrderRow, "fulfillment_type" | "payment_status" | "status">
+) {
   if (order.status === "cancelled") return false;
-
   return order.fulfillment_type === "delivery" && order.payment_status !== "paid";
 }
 
-function formatOperationalPaymentLabel(order: Pick<OrderRow, "fulfillment_type" | "payment_status">) {
+function formatOperationalPaymentLabel(
+  order: Pick<OrderRow, "fulfillment_type" | "payment_status">
+) {
   if (order.fulfillment_type === "pickup") {
     return order.payment_status === "paid" ? "Pagado" : "Pago al recoger";
   }
@@ -350,7 +314,8 @@ function extractNumber(
 ): number | null {
   if (!obj) return null;
   const value = obj[key];
-  const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  const numberValue =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
@@ -430,18 +395,14 @@ function mapOrderItems(
       options: optionsByItemId.get(item.id) ?? [],
     };
 
-    if (!byOrder[item.order_id]) {
-      byOrder[item.order_id] = [next];
-      return;
-    }
-
+    if (!byOrder[item.order_id]) byOrder[item.order_id] = [];
     byOrder[item.order_id].push(next);
   });
 
   return byOrder;
 }
 
-function mapOrderItemOptions(rawOptions: OrderItemOptionRow[]): Map<string, OrderItemOptionView[]> {
+function mapOrderItemOptions(rawOptions: OrderItemOptionRow[]) {
   const byItemId = new Map<string, OrderItemOptionView[]>();
 
   rawOptions.forEach((option) => {
@@ -463,13 +424,6 @@ function mapOrderItemOptions(rawOptions: OrderItemOptionRow[]): Map<string, Orde
   });
 
   return byItemId;
-}
-
-function formatOptionEffectLabel(effectType: string | null) {
-  if (effectType === "additive") return "Extra";
-  if (effectType === "replacement") return "Cambio";
-  if (effectType === "removal") return "Sin";
-  return "Opcion";
 }
 
 function formatOperationLabel(operation: string) {
@@ -511,11 +465,7 @@ function mapOrderEvents(
       created_at: event.created_at,
     };
 
-    if (!byOrder[event.order_id]) {
-      byOrder[event.order_id] = [next];
-      return;
-    }
-
+    if (!byOrder[event.order_id]) byOrder[event.order_id] = [];
     byOrder[event.order_id].push(next);
   });
 
@@ -536,11 +486,11 @@ export async function updateOperationalOrderAction(formData: FormData) {
   }
 
   if (!UUID_REGEX.test(siteId)) {
-    redirect(buildOrdersHref({ view, fulfillment, error: "Sede invalida." }));
+    redirect(buildOrdersHref({ view, fulfillment, error: "Sede inválida." }));
   }
 
   if (!VALID_OPS.includes(op as OpsAction)) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Operacion no soportada." }));
+    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Operación no soportada." }));
   }
 
   const returnTo = buildOrdersHref({ siteId, view, fulfillment });
@@ -565,7 +515,14 @@ export async function updateOperationalOrderAction(formData: FormData) {
     const paymentOrderRow = (paymentOrder ?? null) as OrderRow | null;
 
     if (paymentOrderError || !paymentOrderRow?.id) {
-      redirect(buildOrdersHref({ siteId, view, fulfillment, error: "No pudimos validar el pago del pedido." }));
+      redirect(
+        buildOrdersHref({
+          siteId,
+          view,
+          fulfillment,
+          error: "No pudimos validar el pago del pedido.",
+        })
+      );
     }
 
     if (requiresConfirmedOnlinePayment(paymentOrderRow)) {
@@ -590,7 +547,14 @@ export async function updateOperationalOrderAction(formData: FormData) {
 
     const orderRow = (order ?? null) as OrderOpsRow | null;
     if (orderError || !orderRow?.id || orderRow.fulfillment_type !== "delivery") {
-      redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Solo pedidos delivery pueden pasar a 'En camino'." }));
+      redirect(
+        buildOrdersHref({
+          siteId,
+          view,
+          fulfillment,
+          error: "Solo pedidos a domicilio pueden pasar a 'En camino'.",
+        })
+      );
     }
   }
 
@@ -600,9 +564,7 @@ export async function updateOperationalOrderAction(formData: FormData) {
       p_order_id: orderId,
       p_site_id: siteId,
       p_operation: operation,
-      p_metadata: {
-        source: "pulso_orders_board",
-      },
+      p_metadata: { source: "pulso_orders_board" },
     }
   );
 
@@ -610,9 +572,15 @@ export async function updateOperationalOrderAction(formData: FormData) {
     redirect(buildOrdersHref({ siteId, view, fulfillment, error: rpcError.message }));
   }
 
-  const ok = Boolean((rpcResult as { ok?: boolean } | null)?.ok);
-  if (!ok) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "No pudimos actualizar el pedido." }));
+  if (!Boolean((rpcResult as { ok?: boolean } | null)?.ok)) {
+    redirect(
+      buildOrdersHref({
+        siteId,
+        view,
+        fulfillment,
+        error: "No pudimos actualizar el pedido.",
+      })
+    );
   }
 
   redirect(buildOrdersHref({ siteId, view, fulfillment, message: "Pedido actualizado." }));
@@ -633,7 +601,7 @@ export async function assignDispatchOrderAction(formData: FormData) {
   }
 
   if (!UUID_REGEX.test(siteId)) {
-    redirect(buildOrdersHref({ view, fulfillment, error: "Sede invalida." }));
+    redirect(buildOrdersHref({ view, fulfillment, error: "Sede inválida." }));
   }
 
   if (!dispatchPartner && !dispatchReference) {
@@ -664,9 +632,7 @@ export async function assignDispatchOrderAction(formData: FormData) {
       p_operation: "assign_dispatch",
       p_dispatch_partner: dispatchPartner || null,
       p_dispatch_reference: dispatchReference || null,
-      p_metadata: {
-        source: "pulso_orders_board",
-      },
+      p_metadata: { source: "pulso_orders_board" },
     }
   );
 
@@ -674,9 +640,15 @@ export async function assignDispatchOrderAction(formData: FormData) {
     redirect(buildOrdersHref({ siteId, view, fulfillment, error: rpcError.message }));
   }
 
-  const ok = Boolean((rpcResult as { ok?: boolean } | null)?.ok);
-  if (!ok) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "No pudimos asignar el domiciliario." }));
+  if (!Boolean((rpcResult as { ok?: boolean } | null)?.ok)) {
+    redirect(
+      buildOrdersHref({
+        siteId,
+        view,
+        fulfillment,
+        error: "No pudimos asignar el domiciliario.",
+      })
+    );
   }
 
   redirect(
@@ -687,49 +659,6 @@ export async function assignDispatchOrderAction(formData: FormData) {
       message: "Domiciliario asignado al pedido.",
     })
   );
-}
-
-export async function sendOrderMessageAction(formData: FormData) {
-  "use server";
-
-  const conversationId = readFormString(formData, "conversation_id");
-  const orderId = readFormString(formData, "order_id");
-  const siteId = readFormString(formData, "site_id");
-  const view = asViewFilter(readFormString(formData, "view"));
-  const fulfillment = asFulfillmentFilter(readFormString(formData, "fulfillment"));
-  const body = readFormString(formData, "body");
-
-  if (!UUID_REGEX.test(conversationId) || !UUID_REGEX.test(orderId) || !UUID_REGEX.test(siteId)) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "Chat inválido." }));
-  }
-
-  if (!body) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: "El mensaje no puede estar vacio." }));
-  }
-
-  const returnTo = buildOrdersHref({ siteId, view, fulfillment });
-  const { supabase, user } = await requireAppAccess({
-    appId: "pulso",
-    returnTo,
-    siteId,
-    permissionCode: ["pos.main"],
-    requireAppAccessPermission: true,
-  });
-
-  const { error: insertError } = await supabase.from("order_messages").insert({
-    conversation_id: conversationId,
-    order_id: orderId,
-    site_id: siteId,
-    author_id: user.id,
-    author_type: "staff",
-    body,
-  });
-
-  if (insertError) {
-    redirect(buildOrdersHref({ siteId, view, fulfillment, error: insertError.message }));
-  }
-
-  redirect(buildOrdersHref({ siteId, view, fulfillment, message: "Mensaje enviado." }));
 }
 
 export async function sendOrderMessageLiveAction(input: {
@@ -746,17 +675,11 @@ export async function sendOrderMessageLiveAction(input: {
   const body = input.body?.trim();
 
   if (!UUID_REGEX.test(conversationId) || !UUID_REGEX.test(orderId) || !UUID_REGEX.test(siteId)) {
-    return {
-      ok: false,
-      error: "Chat inválido.",
-    };
+    return { ok: false, error: "Chat inválido." };
   }
 
   if (!body) {
-    return {
-      ok: false,
-      error: "El mensaje no puede estar vacío.",
-    };
+    return { ok: false, error: "El mensaje no puede estar vacío." };
   }
 
   const returnTo = buildOrdersHref({ siteId });
@@ -781,17 +704,9 @@ export async function sendOrderMessageLiveAction(input: {
     .select("id,conversation_id,order_id,site_id,author_id,author_type,body,created_at")
     .single();
 
-  if (error) {
-    return {
-      ok: false,
-      error: error.message,
-    };
-  }
+  if (error) return { ok: false, error: error.message };
 
-  return {
-    ok: true,
-    message: data as OrderMessageRow,
-  };
+  return { ok: true, message: data as OrderMessageRow };
 }
 
 export default async function OrdersOperationalPage({
@@ -842,8 +757,8 @@ export default async function OrdersOperationalPage({
 
   const { data, error } = await query;
   const orders = (data ?? []) as OrderRow[];
-
   const orderIds = orders.map((order) => order.id);
+
   let orderItemsByOrder: Record<string, OrderItemView[]> = {};
   let orderItemsError: string | null = null;
   let orderEventsByOrder: Record<string, OrderStatusEventView[]> = {};
@@ -873,13 +788,11 @@ export default async function OrdersOperationalPage({
           .in("id", productIds);
 
         ((productsData ?? []) as ProductRow[]).forEach((product) => {
-          if (!product.id) return;
-          productNameById.set(product.id, product.name || "Producto");
+          if (product.id) productNameById.set(product.id, product.name || "Producto");
         });
       }
 
       const itemIds = rawItems.map((item) => item.id).filter(Boolean);
-
       if (itemIds.length > 0) {
         const { data: optionRows, error: optionsError } = await supabase
           .from("order_item_options")
@@ -962,73 +875,89 @@ export default async function OrdersOperationalPage({
           orderMessagesError = messagesError.message;
         } else {
           const rawMessages = (messagesData ?? []) as OrderMessageRow[];
-          messagesByConversation = rawMessages.reduce<Record<string, OrderMessageRow[]>>((acc, message) => {
-            if (!acc[message.conversation_id]) acc[message.conversation_id] = [];
-            acc[message.conversation_id].push(message);
-            return acc;
-          }, {});
+          messagesByConversation = rawMessages.reduce<Record<string, OrderMessageRow[]>>(
+            (acc, message) => {
+              if (!acc[message.conversation_id]) acc[message.conversation_id] = [];
+              acc[message.conversation_id].push(message);
+              return acc;
+            },
+            {}
+          );
         }
       }
     }
   }
 
-  const activeCount = orders.filter(
-    (row) =>
-      row.status === "pending" ||
-      row.status === "confirmed" ||
-      row.status === "preparing" ||
-      row.status === "ready_for_dispatch" ||
-      row.status === "in_transit" ||
-      row.status === "on_the_way"
+  const activeCount = orders.filter((row) =>
+    ["pending", "confirmed", "preparing", "ready_for_dispatch", "in_transit", "on_the_way"].includes(
+      row.status || ""
+    )
   ).length;
 
   const dispatchReadyCount = orders.filter(
     (row) => row.fulfillment_type === "delivery" && row.status === "ready_for_dispatch"
   ).length;
 
-  const baseHref = buildOrdersHref({ siteId, view, fulfillment });
+  const boardOrders = orders.map((order) => {
+    const items = orderItemsByOrder[order.id] ?? [];
+    const conversation = conversationByOrder[order.id] ?? null;
+    const statusKey = order.status || "pending";
+    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+
+    return {
+      order,
+      items,
+      events: orderEventsByOrder[order.id] ?? [],
+      conversation,
+      messages: conversation ? messagesByConversation[conversation.id] ?? [] : [],
+      guestName: extractText(order.guest_info, "contact_name"),
+      guestPhone: extractText(order.guest_info, "contact_phone") || order.contact_phone,
+      fullAddress: formatAddress(order.delivery_address),
+      mapsHref: buildMapsHref(order.delivery_address),
+      orderCode: order.id.slice(0, 8).toUpperCase(),
+      statusLabel: STATUS_LABELS[statusKey] || statusKey,
+      statusTone: STATUS_TONE[statusKey] || "ui-chip",
+      paymentLabel: formatOperationalPaymentLabel(order),
+      dispatchLabel: formatDispatchStatusLabel(order.dispatch_status),
+      sourceLabel: formatSourceLabel(order.source),
+      fulfillmentLabel:
+        order.fulfillment_type === "delivery"
+          ? "Domicilio"
+          : order.fulfillment_type === "pickup"
+            ? "Recoger"
+            : "En sitio",
+      itemCount,
+      paymentBlocked: requiresConfirmedOnlinePayment(order),
+      operationButtons: actionButtons(order),
+    };
+  });
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-5">
       <div className="rounded-3xl border border-cyan-100 bg-white px-5 py-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-600">
               Operación en vivo
             </div>
-            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
-              Pedidos
-            </h1>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950">Pedidos</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Entradas, preparación, despacho y chat operativo por sede.
+              Vista compacta. Abre una tarjeta para operar el pedido.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
-              <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-                Activos
-              </div>
+          <div className="flex gap-2">
+            <div className="min-w-20 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
+              <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">Activos</div>
               <div className="text-lg font-black text-slate-950">{activeCount}</div>
             </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
-              <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-                Listos
-              </div>
+            <div className="min-w-20 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
+              <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">Listos</div>
               <div className="text-lg font-black text-slate-950">{dispatchReadyCount}</div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
-              <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-                Sede
-              </div>
-              <div className="text-lg font-black text-slate-950">
-                {(siteId || "").slice(0, 8)}
-              </div>
             </div>
           </div>
         </div>
+
         <div className="mt-4 border-t border-slate-100 pt-4">
           <OrdersLiveBridge siteId={siteId ?? ""} />
         </div>
@@ -1038,7 +967,7 @@ export default async function OrdersOperationalPage({
       {params?.error ? <div className="ui-alert ui-alert--error">{params.error}</div> : null}
       {error ? <div className="ui-alert ui-alert--error">Error cargando pedidos: {error.message}</div> : null}
       {orderItemsError ? (
-        <div className="ui-alert ui-alert--warn">No se pudo cargar el detalle de items: {orderItemsError}</div>
+        <div className="ui-alert ui-alert--warn">No se pudo cargar el detalle de productos: {orderItemsError}</div>
       ) : null}
       {orderEventsError ? (
         <div className="ui-alert ui-alert--warn">No se pudo cargar la bitácora: {orderEventsError}</div>
@@ -1050,13 +979,8 @@ export default async function OrdersOperationalPage({
       <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-xs font-black uppercase tracking-wide text-slate-400">
-              Estado
-            </span>
-
+            <span className="mr-1 text-xs font-black uppercase tracking-wide text-slate-400">Estado</span>
             {(["active", "delivered", "cancelled", "all"] as ViewFilter[]).map((item) => {
-              const href = buildOrdersHref({ siteId, view: item, fulfillment });
-              const active = view === item;
               const label =
                 item === "active"
                   ? "Activos"
@@ -1069,11 +993,12 @@ export default async function OrdersOperationalPage({
               return (
                 <Link
                   key={item}
-                  href={href}
-                  className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${active
-                    ? "bg-cyan-500 text-white shadow-sm"
-                    : "bg-slate-50 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
-                    }`}
+                  href={buildOrdersHref({ siteId, view: item, fulfillment })}
+                  className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${
+                    view === item
+                      ? "bg-cyan-500 text-white shadow-sm"
+                      : "bg-slate-50 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+                  }`}
                 >
                   {label}
                 </Link>
@@ -1082,13 +1007,8 @@ export default async function OrdersOperationalPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-            <span className="mr-1 text-xs font-black uppercase tracking-wide text-slate-400">
-              Tipo
-            </span>
-
+            <span className="mr-1 text-xs font-black uppercase tracking-wide text-slate-400">Tipo</span>
             {(["all", "delivery", "pickup", "on_premise"] as FulfillmentFilter[]).map((item) => {
-              const href = buildOrdersHref({ siteId, view, fulfillment: item });
-              const active = fulfillment === item;
               const label =
                 item === "all"
                   ? "Todos"
@@ -1101,11 +1021,12 @@ export default async function OrdersOperationalPage({
               return (
                 <Link
                   key={item}
-                  href={href}
-                  className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${active
-                    ? "bg-cyan-500 text-white shadow-sm"
-                    : "bg-slate-50 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
-                    }`}
+                  href={buildOrdersHref({ siteId, view, fulfillment: item })}
+                  className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${
+                    fulfillment === item
+                      ? "bg-cyan-500 text-white shadow-sm"
+                      : "bg-slate-50 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+                  }`}
                 >
                   {label}
                 </Link>
@@ -1121,312 +1042,22 @@ export default async function OrdersOperationalPage({
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-600">
               <PackageCheck className="h-6 w-6" />
             </div>
-            <div className="text-lg font-black text-slate-950">
-              Sin pedidos en esta vista
-            </div>
+            <div className="text-lg font-black text-slate-950">Sin pedidos en esta vista</div>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              El tablero está escuchando pedidos nuevos en vivo. Cuando entre uno, aparecerá aquí automáticamente.
+              Cuando entre un pedido nuevo aparecerá aquí automáticamente.
             </p>
           </div>
         </div>
       ) : (
-        <div className="grid gap-4">
-          {orders.map((order) => {
-            const detailItems = orderItemsByOrder[order.id] ?? [];
-            const detailEvents = orderEventsByOrder[order.id] ?? [];
-            const conversation = conversationByOrder[order.id] ?? null;
-            const chatMessages = conversation ? messagesByConversation[conversation.id] ?? [] : [];
-            const guestName = extractText(order.guest_info, "contact_name");
-            const guestPhone = extractText(order.guest_info, "contact_phone") || order.contact_phone;
-            const fullAddress = formatAddress(order.delivery_address);
-            const mapsHref = buildMapsHref(order.delivery_address);
-            const statusKey = order.status || "pending";
-            const statusClass = STATUS_TONE[statusKey] || "ui-chip";
-            const statusLabel = STATUS_LABELS[statusKey] || statusKey;
-            const fulfillmentLabel =
-              order.fulfillment_type === "delivery"
-                ? "Domicilio"
-                : order.fulfillment_type === "pickup"
-                  ? "Recoger"
-                  : "En sitio";
-            const orderCode = order.id.slice(0, 8).toUpperCase();
-            const paymentLabel = formatOperationalPaymentLabel(order);
-            const dispatchLabel = formatDispatchStatusLabel(order.dispatch_status);
-            const sourceLabel = formatSourceLabel(order.source);
-            const operationButtons = actionButtons(order);
-            const itemCount = detailItems.reduce((sum, item) => sum + item.quantity, 0);
-            const paymentBlocked = requiresConfirmedOnlinePayment(order);
-
-            return (
-              <div
-                key={order.id}
-                className={`ui-panel space-y-3 ${paymentBlocked ? "border-amber-200 bg-amber-50/50 shadow-[0_18px_45px_rgba(245,158,11,0.14)]" : ""}`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="ui-h3">Pedido #{orderCode}</div>
-                      <div className={statusClass}>{statusLabel}</div>
-                    </div>
-
-                    <div className="mt-1 ui-caption">
-                      {formatDate(order.created_at)}
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="ui-h3">{formatMoney(order.total_amount)}</div>
-                    <div className="ui-caption">{paymentLabel}</div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <div className="ui-chip">
-                    Cliente: {guestName || "Sin nombre"}
-                  </div>
-
-                  {guestPhone ? (
-                    <div className="ui-chip">
-                      Tel: {guestPhone}
-                    </div>
-                  ) : null}
-
-                  <div className="ui-chip ui-chip--brand inline-flex items-center gap-1">
-                    {order.fulfillment_type === "delivery" ? (
-                      <Bike className="h-3.5 w-3.5" />
-                    ) : (
-                      <Store className="h-3.5 w-3.5" />
-                    )}
-                    {fulfillmentLabel}
-                  </div>
-
-                  <div className="ui-chip">
-                    Despacho: {dispatchLabel}
-                  </div>
-
-                  <div className="ui-chip">
-                    Origen: {sourceLabel}
-                  </div>
-
-                  {order.delivery_zone ? (
-                    <div className="ui-chip">
-                      Zona: {order.delivery_zone}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="ui-label">Detalle del pedido</div>
-                    <div className="ui-caption">
-                      {itemCount || detailItems.length} item{(itemCount || detailItems.length) === 1 ? "" : "s"}
-                    </div>
-                  </div>
-
-                  {detailItems.length === 0 ? (
-                    <div className="mt-2 ui-caption">Este pedido no tiene items visibles.</div>
-                  ) : (
-                    <div className="mt-2 divide-y divide-[var(--ui-border)]">
-                      {detailItems.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-                          <div className="min-w-0">
-                            <div className="ui-body truncate">
-                              {item.quantity} x {item.product_name}
-                            </div>
-                            <div className="ui-caption">{formatMoney(item.unit_price)} c/u</div>
-                            {item.options.length > 0 ? (
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {item.options.map((option) => (
-                                  <div
-                                    key={option.id}
-                                    className="rounded-full border border-cyan-100 bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800"
-                                  >
-                                    {formatOptionEffectLabel(option.effect_type)} · {option.group_name}: {option.option_name}
-                                    {option.price_delta_amount > 0 ? ` · +${formatMoney(option.price_delta_amount)}` : ""}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : null}
-                            {item.notes ? <div className="ui-caption">Nota: {item.notes}</div> : null}
-                          </div>
-
-                          <div className="ui-body whitespace-nowrap font-semibold">
-                            {formatMoney(item.total_amount)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {order.fulfillment_type === "delivery" ? (
-                  <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3 space-y-3">
-                    <div>
-                      <div className="ui-label">Dirección</div>
-                      <div className="ui-body">{fullAddress || "Sin dirección cargada"}</div>
-                      {mapsHref ? (
-                        <a
-                          className="mt-2 inline-flex items-center gap-2 rounded-full border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-1.5 text-sm font-semibold text-[var(--ui-text)]"
-                          href={mapsHref}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <MapPin className="h-4 w-4" />
-                          Abrir punto en Google Maps
-                        </a>
-                      ) : null}
-                      <div className="ui-caption">
-                        Aliado: {order.dispatch_partner || "manual"} · Ref: {order.dispatch_reference || "n/a"}
-                      </div>
-                    </div>
-
-                    {order.status !== "delivered" && order.status !== "cancelled" ? (
-                      <form action={assignDispatchOrderAction} className="space-y-2">
-                        <input type="hidden" name="order_id" value={order.id} />
-                        <input type="hidden" name="site_id" value={siteId ?? ""} />
-                        <input type="hidden" name="view" value={view} />
-                        <input type="hidden" name="fulfillment" value={fulfillment} />
-
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <input
-                            className="ui-input"
-                            name="dispatch_partner"
-                            defaultValue={order.dispatch_partner ?? ""}
-                            placeholder="Aliado de domicilio"
-                          />
-                          <input
-                            className="ui-input"
-                            name="dispatch_reference"
-                            defaultValue={order.dispatch_reference ?? ""}
-                            placeholder="Referencia de despacho"
-                          />
-                        </div>
-
-                        <button type="submit" className="ui-btn ui-btn--brand h-9 px-3 text-sm">
-                          Asignar domiciliario
-                        </button>
-                      </form>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {order.notes ? (
-                  <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-2">
-                    <div className="ui-label">Notas</div>
-                    <div className="ui-body">{order.notes}</div>
-                  </div>
-                ) : null}
-
-                <OrderChatLive
-                  conversation={conversation}
-                  initialMessages={chatMessages}
-                  orderId={order.id}
-                  orderStatus={order.status}
-                  siteId={siteId ?? ""}
-                  sendMessageAction={sendOrderMessageLiveAction}
-                />
-
-                <form
-                  action={updateOperationalOrderAction}
-                  className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3"
-                >
-                  <input type="hidden" name="order_id" value={order.id} />
-                  <input type="hidden" name="site_id" value={siteId ?? ""} />
-                  <input type="hidden" name="view" value={view} />
-                  <input type="hidden" name="fulfillment" value={fulfillment} />
-
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="ui-label">Acciones</div>
-                      <div className="ui-caption">Avanza el pedido según su estado operativo.</div>
-                    </div>
-
-                    {operationButtons.length === 0 ? (
-                      <div className="ui-chip">Sin acciones disponibles</div>
-                    ) : null}
-                  </div>
-
-                  {paymentBlocked ? (
-                    <div className="ui-alert ui-alert--warn mb-2">
-                      Pago pendiente: este domicilio no debe prepararse hasta que Wompi lo confirme.
-                    </div>
-                  ) : null}
-
-                  <div className="flex flex-wrap gap-2">
-                    {operationButtons.map((button) => {
-                      const toneClass =
-                        button.op === "mark_cancelled" ? "ui-btn--danger" : "ui-btn--primary";
-                      const Icon =
-                        button.op === "mark_delivered"
-                          ? CheckCircle2
-                          : button.op === "mark_cancelled"
-                            ? XCircle
-                            : Clock3;
-
-                      return (
-                        <button
-                          key={`${order.id}-${button.op}`}
-                          type="submit"
-                          name="op"
-                          value={button.op}
-                          className={`ui-btn ${toneClass} h-9 px-3 text-sm`}
-                        >
-                          <Icon className="h-4 w-4" />
-                          {button.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </form>
-
-                <details className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-2)] px-3 py-3">
-                  <summary className="cursor-pointer list-none">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="ui-label">Bitácora</div>
-                      <div className="ui-caption">
-                        {detailEvents.length === 0
-                          ? "Sin eventos"
-                          : `${detailEvents.length} evento${detailEvents.length === 1 ? "" : "s"}`}
-                      </div>
-                    </div>
-                  </summary>
-
-                  {detailEvents.length === 0 ? (
-                    <div className="mt-2 ui-caption">Sin eventos registrados.</div>
-                  ) : (
-                    <div className="mt-3 space-y-2">
-                      {detailEvents.slice(0, 6).map((event) => (
-                        <div
-                          key={event.id}
-                          className="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="ui-body text-sm font-semibold">{event.operation}</div>
-                            <div className="ui-caption">{formatDate(event.created_at)}</div>
-                          </div>
-
-                          <div className="ui-caption">
-                            {event.actor_name}
-                            {event.from_status || event.to_status
-                              ? ` · ${formatStatusLabel(event.from_status) || "-"} → ${formatStatusLabel(event.to_status) || "-"}`
-                              : ""}
-                          </div>
-
-                          {event.to_dispatch_status ? (
-                            <div className="ui-caption">
-                              Despacho: {formatDispatchStatusLabel(event.from_dispatch_status)} →{" "}
-                              {formatDispatchStatusLabel(event.to_dispatch_status)}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </details>
-              </div>
-            );
-          })}
-        </div>
+        <OrdersBoard
+          orders={boardOrders}
+          siteId={siteId ?? ""}
+          view={view}
+          fulfillment={fulfillment}
+          updateOperationalOrderAction={updateOperationalOrderAction}
+          assignDispatchOrderAction={assignDispatchOrderAction}
+          sendOrderMessageLiveAction={sendOrderMessageLiveAction}
+        />
       )}
     </div>
   );
