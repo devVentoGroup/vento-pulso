@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - scripts/apply-order-modal-operational-improvements.py
+      - scripts/apply-order-modal-operational-improvements.trigger
 
 permissions:
   contents: write
