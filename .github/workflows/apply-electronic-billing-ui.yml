@@ -21,12 +21,27 @@ jobs:
           fetch-depth: 0
 
       - name: Apply Pulso billing UI
-        run: node scripts/apply-electronic-billing-ui.mjs
+        run: |
+          set +e
+          node scripts/apply-electronic-billing-ui.mjs > /tmp/billing-patch.log 2>&1
+          status=$?
+          cat /tmp/billing-patch.log
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/billing-patch.log scripts/apply-electronic-billing-ui.error.log
+          fi
+          exit 0
 
-      - name: Commit changes
+      - name: Commit changes or diagnostics
         run: |
           git config user.name "vento-billing-bot"
           git config user.email "billing-bot@ventogroup.co"
-          git add src/app/orders/page.tsx src/app/orders/orders-board.tsx
-          git commit -m "feat(billing): show electronic invoice requests in Pulso"
+          git add src/app/orders/page.tsx src/app/orders/orders-board.tsx scripts/apply-electronic-billing-ui.error.log 2>/dev/null || true
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          if [ -f scripts/apply-electronic-billing-ui.error.log ]; then
+            git commit -m "chore: record electronic billing UI patch error"
+          else
+            git commit -m "feat(billing): show electronic invoice requests in Pulso"
+          fi
           git push origin HEAD:main
