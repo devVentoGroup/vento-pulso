@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
   Bike,
@@ -19,6 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { createClient } from "@/lib/supabase/client";
 import { OrderChatLive } from "./order-chat-live";
 
 type ViewFilter = "active" | "delivered" | "cancelled" | "all";
@@ -156,6 +157,12 @@ type OrdersBoardProps = {
 
 type ModalTab = "order" | "chat" | "history";
 
+type UnreadRow = {
+  order_id: string;
+  conversation_id: string;
+  unread_count: number | string | null;
+};
+
 const STATUS_ACCENT: Record<string, string> = {
   pending: "bg-amber-400",
   confirmed: "bg-cyan-500",
@@ -221,9 +228,7 @@ function statusTransitionLabel(value: string | null) {
     delivered: "Entregado",
     cancelled: "Cancelado",
   };
-
-  if (!value) return "-";
-  return labels[value] || value;
+  return value ? labels[value] || value : "-";
 }
 
 function dispatchTransitionLabel(value: string | null) {
@@ -236,9 +241,7 @@ function dispatchTransitionLabel(value: string | null) {
     delivered: "Entregado",
     cancelled: "Cancelado",
   };
-
-  if (!value) return "-";
-  return labels[value] || value;
+  return value ? labels[value] || value : "-";
 }
 
 function ActionIcon({ op }: { op: OpsAction }) {
@@ -248,7 +251,15 @@ function ActionIcon({ op }: { op: OpsAction }) {
   return <Clock3 className="h-4 w-4" />;
 }
 
-function OrderCard({ data, onOpen }: { data: OrderCardData; onOpen: () => void }) {
+function OrderCard({
+  data,
+  unreadCount,
+  onOpen,
+}: {
+  data: OrderCardData;
+  unreadCount: number;
+  onOpen: () => void;
+}) {
   const { order, items } = data;
   const firstItems = items.slice(0, 2);
   const remainingItems = Math.max(0, items.length - firstItems.length);
@@ -258,22 +269,30 @@ function OrderCard({ data, onOpen }: { data: OrderCardData; onOpen: () => void }
     <button
       type="button"
       onClick={onOpen}
-      className="group relative min-h-[220px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-400"
+      className={`group relative min-h-[220px] overflow-hidden rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
+        unreadCount > 0 ? "border-cyan-400 ring-2 ring-cyan-100" : "border-slate-200 hover:border-cyan-300"
+      }`}
     >
       <div className={`absolute inset-x-0 top-0 h-1.5 ${accent}`} />
 
-      <div className="flex items-start justify-between gap-3">
+      {unreadCount > 0 ? (
+        <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-1 text-xs font-black text-white shadow-sm">
+          <MessageCircle className="h-3.5 w-3.5" />
+          {unreadCount > 99 ? "99+" : unreadCount} nuevo{unreadCount === 1 ? "" : "s"}
+        </div>
+      ) : null}
+
+      <div className={`flex items-start justify-between gap-3 ${unreadCount > 0 ? "pr-28" : ""}`}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-sm font-black text-slate-950">#{data.orderCode}</div>
             <span className={data.statusTone}>{data.statusLabel}</span>
           </div>
-          <div className="mt-1 text-xs font-medium text-slate-500">
-            {formatCardTime(order.created_at)}
-          </div>
+          <div className="mt-1 text-xs font-medium text-slate-500">{formatCardTime(order.created_at)}</div>
         </div>
-
-        <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-cyan-600" />
+        {unreadCount === 0 ? (
+          <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-cyan-600" />
+        ) : null}
       </div>
 
       <div className="mt-4 flex items-center gap-2 text-sm font-bold text-slate-800">
@@ -307,7 +326,9 @@ function OrderCard({ data, onOpen }: { data: OrderCardData; onOpen: () => void }
           ))
         )}
         {remainingItems > 0 ? (
-          <div className="text-xs font-bold text-cyan-700">+{remainingItems} producto{remainingItems === 1 ? "" : "s"}</div>
+          <div className="text-xs font-bold text-cyan-700">
+            +{remainingItems} producto{remainingItems === 1 ? "" : "s"}
+          </div>
         ) : null}
       </div>
 
@@ -337,11 +358,117 @@ export function OrdersBoard({
 }: OrdersBoardProps) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ModalTab>("order");
+  const [unreadByOrder, setUnreadByOrder] = useState<Record<string, number>>({});
+  const selectedOrderIdRef = useRef<string | null>(null);
+  const activeTabRef = useRef<ModalTab>("order");
+  const supabase = useMemo(() => createClient(), []);
 
   const selected = useMemo(
     () => orders.find((entry) => entry.order.id === selectedOrderId) ?? null,
-    [orders, selectedOrderId]
+    [orders, selectedOrderId],
   );
+
+  const totalUnread = useMemo(
+    () => Object.values(unreadByOrder).reduce((sum, count) => sum + count, 0),
+    [unreadByOrder],
+  );
+
+  useEffect(() => {
+    selectedOrderIdRef.current = selectedOrderId;
+  }, [selectedOrderId]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  const loadUnreadCounts = useCallback(async () => {
+    if (!siteId) return;
+
+    const { data, error } = await supabase.rpc("get_staff_order_chat_unread_counts", {
+      p_site_id: siteId,
+    });
+
+    if (error) {
+      console.warn("No se pudieron cargar mensajes pendientes:", error.message);
+      return;
+    }
+
+    const next: Record<string, number> = {};
+    ((data || []) as UnreadRow[]).forEach((row) => {
+      next[row.order_id] = Number(row.unread_count || 0);
+    });
+    setUnreadByOrder(next);
+  }, [siteId, supabase]);
+
+  const markRead = useCallback(
+    async (conversationId: string, orderId: string) => {
+      const { error } = await supabase.rpc("mark_order_conversation_read", {
+        p_conversation_id: conversationId,
+      });
+
+      if (error) {
+        console.warn("No se pudo marcar el chat como leído:", error.message);
+        return;
+      }
+
+      setUnreadByOrder((current) => ({ ...current, [orderId]: 0 }));
+    },
+    [supabase],
+  );
+
+  useEffect(() => {
+    void loadUnreadCounts();
+  }, [loadUnreadCounts]);
+
+  useEffect(() => {
+    if (!siteId) return;
+
+    const channel = supabase
+      .channel(`pulso-order-unread:${siteId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "order_messages",
+          filter: `site_id=eq.${siteId}`,
+        },
+        (payload) => {
+          const message = payload.new as OrderMessageRow;
+          if (message.author_type !== "client") return;
+
+          const currentlyReading =
+            selectedOrderIdRef.current === message.order_id && activeTabRef.current === "chat";
+
+          if (currentlyReading) {
+            void markRead(message.conversation_id, message.order_id);
+            return;
+          }
+
+          setUnreadByOrder((current) => ({
+            ...current,
+            [message.order_id]: (current[message.order_id] || 0) + 1,
+          }));
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "order_conversations",
+          filter: `site_id=eq.${siteId}`,
+        },
+        () => {
+          void loadUnreadCounts();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadUnreadCounts, markRead, siteId, supabase]);
 
   useEffect(() => {
     if (!selected) return;
@@ -354,7 +481,6 @@ export function OrdersBoard({
     };
 
     window.addEventListener("keydown", handleKeyDown);
-
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
@@ -366,11 +492,37 @@ export function OrdersBoard({
     setSelectedOrderId(orderId);
   };
 
+  const selectTab = (tab: ModalTab) => {
+    setActiveTab(tab);
+    if (tab === "chat" && selected?.conversation) {
+      void markRead(selected.conversation.id, selected.order.id);
+    }
+  };
+
   return (
     <>
+      {totalUnread > 0 ? (
+        <div className="mb-3 flex items-center gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-cyan-950 shadow-sm">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500 text-white">
+            <MessageCircle className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-sm font-black">
+              {totalUnread} mensaje{totalUnread === 1 ? "" : "s"} pendiente{totalUnread === 1 ? "" : "s"}
+            </div>
+            <div className="text-xs font-semibold text-cyan-700">Las tarjetas resaltadas requieren respuesta.</div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {orders.map((entry) => (
-          <OrderCard key={entry.order.id} data={entry} onOpen={() => openOrder(entry.order.id)} />
+          <OrderCard
+            key={entry.order.id}
+            data={entry}
+            unreadCount={unreadByOrder[entry.order.id] || 0}
+            onOpen={() => openOrder(entry.order.id)}
+          />
         ))}
       </div>
 
@@ -395,9 +547,7 @@ export function OrdersBoard({
                     Pedido #{selected.orderCode}
                   </h2>
                   <span className={selected.statusTone}>{selected.statusLabel}</span>
-                  {selected.paymentBlocked ? (
-                    <span className="ui-chip ui-chip--warn">{selected.paymentLabel}</span>
-                  ) : null}
+                  {selected.paymentBlocked ? <span className="ui-chip ui-chip--warn">{selected.paymentLabel}</span> : null}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500">
                   <span>{formatDate(selected.order.created_at)}</span>
@@ -431,17 +581,24 @@ export function OrdersBoard({
                 ]).map((tab) => {
                   const Icon = tab.icon;
                   const active = activeTab === tab.id;
+                  const chatUnread = tab.id === "chat" ? unreadByOrder[selected.order.id] || 0 : 0;
+
                   return (
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-black transition ${
+                      onClick={() => selectTab(tab.id)}
+                      className={`relative inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-black transition ${
                         active ? "bg-cyan-500 text-white" : "text-slate-600 hover:bg-slate-100"
                       }`}
                     >
                       <Icon className="h-4 w-4" />
                       {tab.label}
+                      {chatUnread > 0 ? (
+                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-black text-white">
+                          {chatUnread > 99 ? "99+" : chatUnread}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -464,21 +621,15 @@ export function OrdersBoard({
                       </div>
 
                       {selected.items.length === 0 ? (
-                        <div className="rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">
-                          Este pedido no tiene productos visibles.
-                        </div>
+                        <div className="rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">Este pedido no tiene productos visibles.</div>
                       ) : (
                         <div className="divide-y divide-slate-100">
                           {selected.items.map((item) => (
                             <div key={item.id} className="py-3 first:pt-0 last:pb-0">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0">
-                                  <div className="font-bold text-slate-900">
-                                    {item.quantity} × {item.product_name}
-                                  </div>
-                                  <div className="mt-0.5 text-xs text-slate-500">
-                                    {formatMoney(item.unit_price)} c/u
-                                  </div>
+                                  <div className="font-bold text-slate-900">{item.quantity} × {item.product_name}</div>
+                                  <div className="mt-0.5 text-xs text-slate-500">{formatMoney(item.unit_price)} c/u</div>
                                 </div>
                                 <div className="shrink-0 font-black text-slate-900">{formatMoney(item.total_amount)}</div>
                               </div>
@@ -486,10 +637,7 @@ export function OrdersBoard({
                               {item.options.length > 0 ? (
                                 <div className="mt-2 flex flex-wrap gap-1.5">
                                   {item.options.map((option) => (
-                                    <span
-                                      key={option.id}
-                                      className="rounded-full border border-cyan-100 bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800"
-                                    >
+                                    <span key={option.id} className="rounded-full border border-cyan-100 bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800">
                                       {optionEffectLabel(option.effect_type)} · {option.group_name}: {option.option_name}
                                       {option.price_delta_amount > 0 ? ` · +${formatMoney(option.price_delta_amount)}` : ""}
                                     </span>
@@ -498,9 +646,7 @@ export function OrdersBoard({
                               ) : null}
 
                               {item.notes ? (
-                                <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-                                  Nota: {item.notes}
-                                </div>
+                                <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Nota: {item.notes}</div>
                               ) : null}
                             </div>
                           ))}
@@ -516,20 +662,13 @@ export function OrdersBoard({
                     ) : null}
 
                     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-black text-slate-950">Acciones del pedido</div>
-                          <div className="text-xs text-slate-500">Avanza el pedido según su estado operativo.</div>
-                        </div>
-                        {selected.operationButtons.length === 0 ? (
-                          <span className="ui-chip">Sin acciones disponibles</span>
-                        ) : null}
+                      <div className="mb-3">
+                        <div className="text-sm font-black text-slate-950">Acciones del pedido</div>
+                        <div className="text-xs text-slate-500">Avanza el pedido según su estado operativo.</div>
                       </div>
 
                       {selected.paymentBlocked ? (
-                        <div className="ui-alert ui-alert--warn mb-3">
-                          Pago pendiente: este domicilio no debe prepararse hasta que Wompi lo confirme.
-                        </div>
+                        <div className="ui-alert ui-alert--warn mb-3">Pago pendiente: este domicilio no debe prepararse hasta que Wompi lo confirme.</div>
                       ) : null}
 
                       <form action={updateOperationalOrderAction} className="flex flex-wrap gap-2">
@@ -537,16 +676,13 @@ export function OrdersBoard({
                         <input type="hidden" name="site_id" value={siteId} />
                         <input type="hidden" name="view" value={view} />
                         <input type="hidden" name="fulfillment" value={fulfillment} />
-
                         {selected.operationButtons.map((button) => (
                           <button
                             key={`${selected.order.id}-${button.op}`}
                             type="submit"
                             name="op"
                             value={button.op}
-                            className={`ui-btn h-10 px-4 text-sm ${
-                              button.op === "mark_cancelled" ? "ui-btn--danger" : "ui-btn--primary"
-                            }`}
+                            className={`ui-btn h-10 px-4 text-sm ${button.op === "mark_cancelled" ? "ui-btn--danger" : "ui-btn--primary"}`}
                           >
                             <ActionIcon op={button.op} />
                             {button.label}
@@ -579,50 +715,24 @@ export function OrdersBoard({
 
                     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center gap-2">
-                        {selected.order.fulfillment_type === "delivery" ? (
-                          <Bike className="h-4 w-4 text-cyan-600" />
-                        ) : (
-                          <Store className="h-4 w-4 text-cyan-600" />
-                        )}
+                        {selected.order.fulfillment_type === "delivery" ? <Bike className="h-4 w-4 text-cyan-600" /> : <Store className="h-4 w-4 text-cyan-600" />}
                         <div className="text-sm font-black text-slate-950">Entrega</div>
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Tipo</div>
-                          <div className="font-bold text-slate-900">{selected.fulfillmentLabel}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Despacho</div>
-                          <div className="font-bold text-slate-900">{selected.dispatchLabel}</div>
-                        </div>
-                        {selected.order.delivery_zone ? (
-                          <div>
-                            <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Zona</div>
-                            <div className="font-bold text-slate-900">{selected.order.delivery_zone}</div>
-                          </div>
-                        ) : null}
-                        <div>
-                          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Pago</div>
-                          <div className="font-bold text-slate-900">{selected.paymentLabel}</div>
-                        </div>
+                        <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Tipo</div><div className="font-bold text-slate-900">{selected.fulfillmentLabel}</div></div>
+                        <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Despacho</div><div className="font-bold text-slate-900">{selected.dispatchLabel}</div></div>
+                        {selected.order.delivery_zone ? <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Zona</div><div className="font-bold text-slate-900">{selected.order.delivery_zone}</div></div> : null}
+                        <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Pago</div><div className="font-bold text-slate-900">{selected.paymentLabel}</div></div>
                       </div>
 
                       {selected.order.fulfillment_type === "delivery" ? (
                         <div className="mt-4 border-t border-slate-100 pt-4">
                           <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Dirección</div>
-                          <div className="mt-1 text-sm font-semibold leading-6 text-slate-800">
-                            {selected.fullAddress || "Sin dirección cargada"}
-                          </div>
+                          <div className="mt-1 text-sm font-semibold leading-6 text-slate-800">{selected.fullAddress || "Sin dirección cargada"}</div>
                           {selected.mapsHref ? (
-                            <a
-                              href={selected.mapsHref}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                            >
-                              <MapPin className="h-4 w-4" />
-                              Abrir en Google Maps
+                            <a href={selected.mapsHref} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                              <MapPin className="h-4 w-4" /> Abrir en Google Maps
                             </a>
                           ) : null}
                         </div>
@@ -631,53 +741,25 @@ export function OrdersBoard({
 
                     {selected.order.fulfillment_type === "delivery" ? (
                       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <div className="flex items-center gap-2">
-                          <Truck className="h-4 w-4 text-cyan-600" />
-                          <div className="text-sm font-black text-slate-950">Domiciliario</div>
-                        </div>
-
-                        <div className="mt-2 text-xs text-slate-500">
-                          Actual: {selected.order.dispatch_partner || "Sin asignar"}
-                          {selected.order.dispatch_reference ? ` · ${selected.order.dispatch_reference}` : ""}
-                        </div>
-
+                        <div className="flex items-center gap-2"><Truck className="h-4 w-4 text-cyan-600" /><div className="text-sm font-black text-slate-950">Domiciliario</div></div>
+                        <div className="mt-2 text-xs text-slate-500">Actual: {selected.order.dispatch_partner || "Sin asignar"}{selected.order.dispatch_reference ? ` · ${selected.order.dispatch_reference}` : ""}</div>
                         {selected.order.status !== "delivered" && selected.order.status !== "cancelled" ? (
                           <form action={assignDispatchOrderAction} className="mt-3 space-y-2">
                             <input type="hidden" name="order_id" value={selected.order.id} />
                             <input type="hidden" name="site_id" value={siteId} />
                             <input type="hidden" name="view" value={view} />
                             <input type="hidden" name="fulfillment" value={fulfillment} />
-
-                            <input
-                              className="ui-input"
-                              name="dispatch_partner"
-                              defaultValue={selected.order.dispatch_partner ?? ""}
-                              placeholder="Aliado o domiciliario"
-                            />
-                            <input
-                              className="ui-input"
-                              name="dispatch_reference"
-                              defaultValue={selected.order.dispatch_reference ?? ""}
-                              placeholder="Referencia de despacho"
-                            />
-                            <button type="submit" className="ui-btn ui-btn--brand h-10 w-full px-4 text-sm">
-                              <Truck className="h-4 w-4" />
-                              Guardar asignación
-                            </button>
+                            <input className="ui-input" name="dispatch_partner" defaultValue={selected.order.dispatch_partner ?? ""} placeholder="Aliado o domiciliario" />
+                            <input className="ui-input" name="dispatch_reference" defaultValue={selected.order.dispatch_reference ?? ""} placeholder="Referencia de despacho" />
+                            <button type="submit" className="ui-btn ui-btn--brand h-10 w-full px-4 text-sm"><Truck className="h-4 w-4" />Guardar asignación</button>
                           </form>
                         ) : null}
                       </section>
                     ) : null}
 
                     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="flex items-center gap-2">
-                        <Banknote className="h-4 w-4 text-cyan-600" />
-                        <div className="text-sm font-black text-slate-950">Resumen</div>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-4">
-                        <div className="text-sm font-semibold text-slate-500">Total del pedido</div>
-                        <div className="text-xl font-black text-slate-950">{formatMoney(selected.order.total_amount)}</div>
-                      </div>
+                      <div className="flex items-center gap-2"><Banknote className="h-4 w-4 text-cyan-600" /><div className="text-sm font-black text-slate-950">Resumen</div></div>
+                      <div className="mt-3 flex items-center justify-between gap-4"><div className="text-sm font-semibold text-slate-500">Total del pedido</div><div className="text-xl font-black text-slate-950">{formatMoney(selected.order.total_amount)}</div></div>
                     </section>
                   </div>
                 </div>
@@ -699,44 +781,19 @@ export function OrdersBoard({
               {activeTab === "history" ? (
                 <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-black text-slate-950">Bitácora del pedido</div>
-                      <div className="text-xs text-slate-500">Cambios de estado y asignaciones registradas.</div>
-                    </div>
-                    <span className="ui-chip">
-                      {selected.events.length} evento{selected.events.length === 1 ? "" : "s"}
-                    </span>
+                    <div><div className="text-sm font-black text-slate-950">Bitácora del pedido</div><div className="text-xs text-slate-500">Cambios de estado y asignaciones registradas.</div></div>
+                    <span className="ui-chip">{selected.events.length} evento{selected.events.length === 1 ? "" : "s"}</span>
                   </div>
-
                   {selected.events.length === 0 ? (
-                    <div className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                      Sin eventos registrados.
-                    </div>
+                    <div className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">Sin eventos registrados.</div>
                   ) : (
                     <div className="space-y-3">
                       {selected.events.map((event) => (
                         <div key={event.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div className="font-bold text-slate-900">{event.operation}</div>
-                            <div className="text-xs text-slate-500">{formatDate(event.created_at)}</div>
-                          </div>
+                          <div className="flex flex-wrap items-start justify-between gap-2"><div className="font-bold text-slate-900">{event.operation}</div><div className="text-xs text-slate-500">{formatDate(event.created_at)}</div></div>
                           <div className="mt-1 text-xs font-semibold text-slate-500">{event.actor_name}</div>
-                          {event.from_status || event.to_status ? (
-                            <div className="mt-2 text-sm text-slate-700">
-                              Estado: {statusTransitionLabel(event.from_status)} → {statusTransitionLabel(event.to_status)}
-                            </div>
-                          ) : null}
-                          {event.from_dispatch_status || event.to_dispatch_status ? (
-                            <div className="mt-1 text-sm text-slate-700">
-                              Despacho: {dispatchTransitionLabel(event.from_dispatch_status)} → {dispatchTransitionLabel(event.to_dispatch_status)}
-                            </div>
-                          ) : null}
-                          {event.dispatch_partner || event.dispatch_reference ? (
-                            <div className="mt-1 text-sm text-slate-700">
-                              Domiciliario: {event.dispatch_partner || "-"}
-                              {event.dispatch_reference ? ` · ${event.dispatch_reference}` : ""}
-                            </div>
-                          ) : null}
+                          {event.from_status || event.to_status ? <div className="mt-2 text-sm text-slate-700">Estado: {statusTransitionLabel(event.from_status)} → {statusTransitionLabel(event.to_status)}</div> : null}
+                          {event.from_dispatch_status || event.to_dispatch_status ? <div className="mt-1 text-sm text-slate-700">Despacho: {dispatchTransitionLabel(event.from_dispatch_status)} → {dispatchTransitionLabel(event.to_dispatch_status)}</div> : null}
                         </div>
                       ))}
                     </div>
