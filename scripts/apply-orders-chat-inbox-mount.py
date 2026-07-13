@@ -22,6 +22,50 @@ if mount_line not in bridge:
         1,
     )
 
+# Las alertas ya no deben recargar toda la página por cada UPDATE.
+alert_refresh = '''      await playAlertSound();
+      sendBrowserNotification(title, body);
+      scheduleRefresh();
+    },
+    [playAlertSound, scheduleRefresh, sendBrowserNotification],'''
+alert_without_refresh = '''      await playAlertSound();
+      sendBrowserNotification(title, body);
+    },
+    [playAlertSound, sendBrowserNotification],'''
+if alert_refresh in bridge:
+    bridge = bridge.replace(alert_refresh, alert_without_refresh, 1)
+
+# Un pedido nuevo sí necesita cargar productos, conversación y datos complementarios.
+insert_alert = '''          void raiseOperationalAlert({
+            title: "Nuevo pedido en Vento Pulso",
+            body: `${fulfillmentLabel} · ${totalLabel}`,
+            notice: `Nuevo pedido ${fulfillmentLabel.toLowerCase()} recibido.`,
+          });'''
+insert_alert_with_refresh = insert_alert + "\n          scheduleRefresh();"
+if insert_alert in bridge and insert_alert_with_refresh not in bridge:
+    bridge = bridge.replace(insert_alert, insert_alert_with_refresh, 1)
+
+# Los UPDATE de estado, pago y despacho los resuelve el tablero local.
+generic_update_refresh = '''          if (paymentWasApproved && nextOrder.fulfillment_type === "delivery") {
+            void raiseOperationalAlert({
+              title: "Pago aprobado",
+              body: `Domicilio listo para preparar · ${formatMoney(nextOrder.total_amount)}`,
+              notice: "Un domicilio ya tiene pago aprobado y puede operarse.",
+            });
+            return;
+          }
+
+          scheduleRefresh();'''
+generic_update_local = '''          if (paymentWasApproved && nextOrder.fulfillment_type === "delivery") {
+            void raiseOperationalAlert({
+              title: "Pago aprobado",
+              body: `Domicilio listo para preparar · ${formatMoney(nextOrder.total_amount)}`,
+              notice: "Un domicilio ya tiene pago aprobado y puede operarse.",
+            });
+          }'''
+if generic_update_refresh in bridge:
+    bridge = bridge.replace(generic_update_refresh, generic_update_local, 1)
+
 bridge_path.write_text(bridge, encoding="utf-8")
 
 
@@ -123,3 +167,21 @@ if "vento-pulso:open-order-chat" not in board:
     board = board.replace(old_block, new_block, 1)
 
 board_path.write_text(board, encoding="utf-8")
+
+
+page_path = Path("src/app/orders/page.tsx")
+page = page_path.read_text(encoding="utf-8")
+
+live_import = 'import { OrdersBoardLive } from "./orders-board-live";'
+if live_import not in page:
+    old_import = 'import { OrdersBoard } from "./orders-board";'
+    if old_import not in page:
+        raise RuntimeError("No se encontró el import del tablero de pedidos")
+    page = page.replace(old_import, live_import, 1)
+
+if "        <OrdersBoard\n" in page:
+    page = page.replace("        <OrdersBoard\n", "        <OrdersBoardLive\n", 1)
+elif "        <OrdersBoardLive\n" not in page:
+    raise RuntimeError("No se encontró el montaje del tablero de pedidos")
+
+page_path.write_text(page, encoding="utf-8")
