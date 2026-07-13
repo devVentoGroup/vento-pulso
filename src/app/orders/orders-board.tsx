@@ -1,19 +1,29 @@
 "use client";
 
 import type { ComponentProps } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
+  CheckCircle2,
   EyeOff,
   Gift,
+  Loader2,
   MessageSquareText,
+  PackageCheck,
   Phone,
   Sparkles,
   UserRound,
 } from "lucide-react";
 
+import { createClient } from "@/lib/supabase/client";
 import { OrdersBoard as BaseOrdersBoard } from "./orders-board-legacy";
 
 type OrdersBoardProps = ComponentProps<typeof BaseOrdersBoard>;
 type OrderEntry = OrdersBoardProps["orders"][number];
+type GiftOperation =
+  | "mark_card_prepared"
+  | "mark_card_included"
+  | "mark_price_free_packaging_confirmed";
 
 type GiftSnapshot = {
   buyerName: string | null;
@@ -29,7 +39,10 @@ type GiftSnapshot = {
   cardTo: string | null;
   cardFrom: string | null;
   cardStatus: string | null;
+  cardPreparedAt: string | null;
+  cardIncludedAt: string | null;
   hidePrices: boolean;
+  packagingConfirmedAt: string | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -72,7 +85,10 @@ function readGiftSnapshot(entry: OrderEntry): GiftSnapshot | null {
     cardTo: readText(gift, "card_to"),
     cardFrom: readText(gift, "card_from"),
     cardStatus: readText(gift, "card_status"),
+    cardPreparedAt: readText(gift, "card_prepared_at"),
+    cardIncludedAt: readText(gift, "card_included_at"),
     hidePrices: readBoolean(gift, "hide_prices", true),
+    packagingConfirmedAt: readText(gift, "price_free_packaging_confirmed_at"),
   };
 }
 
@@ -98,10 +114,156 @@ function cardStatusLabel(value: string | null) {
   return value ? labels[value] || value : "Pendiente";
 }
 
+function GiftChecklistActions({
+  orderId,
+  siteId,
+  gift,
+}: {
+  orderId: string;
+  siteId: string;
+  gift: GiftSnapshot;
+}) {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const [busyOperation, setBusyOperation] = useState<GiftOperation | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const runOperation = async (operation: GiftOperation) => {
+    if (busyOperation) return;
+    setBusyOperation(operation);
+    setErrorMessage(null);
+
+    const { error } = await supabase.rpc("update_order_gift_operational_state", {
+      p_order_id: orderId,
+      p_site_id: siteId,
+      p_operation: operation,
+      p_metadata: { source: "pulso_orders_board" },
+    });
+
+    if (error) {
+      const messages: Record<string, string> = {
+        card_must_be_prepared_first: "Primero debes marcar la tarjeta como preparada.",
+        card_not_requested: "Este regalo no solicitó tarjeta.",
+        permission_denied: "No tienes permiso para actualizar este checklist.",
+        order_not_found: "No se encontró el pedido.",
+      };
+      setErrorMessage(messages[error.message] || error.message);
+      setBusyOperation(null);
+      return;
+    }
+
+    router.refresh();
+    setBusyOperation(null);
+  };
+
+  const cardPrepared = gift.cardStatus === "prepared" || gift.cardStatus === "included";
+  const cardIncluded = gift.cardStatus === "included";
+  const packagingConfirmed = Boolean(gift.packagingConfirmedAt);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+        Checklist operativo
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {gift.cardRequested ? (
+          <>
+            <button
+              type="button"
+              disabled={cardPrepared || Boolean(busyOperation)}
+              onClick={() => void runOperation("mark_card_prepared")}
+              className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-sm font-black transition ${
+                cardPrepared
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100"
+              } disabled:cursor-default`}
+            >
+              <span className="flex items-center gap-2">
+                {busyOperation === "mark_card_prepared" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : cardPrepared ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <MessageSquareText className="h-4 w-4" />
+                )}
+                Tarjeta preparada
+              </span>
+              <span className="text-xs">{cardPrepared ? "Completado" : "Marcar"}</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={cardIncluded || !cardPrepared || Boolean(busyOperation)}
+              onClick={() => void runOperation("mark_card_included")}
+              className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-sm font-black transition ${
+                cardIncluded
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : cardPrepared
+                    ? "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100"
+                    : "border-slate-200 bg-slate-50 text-slate-400"
+              } disabled:cursor-default`}
+            >
+              <span className="flex items-center gap-2">
+                {busyOperation === "mark_card_included" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : cardIncluded ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <PackageCheck className="h-4 w-4" />
+                )}
+                Tarjeta incluida en el pedido
+              </span>
+              <span className="text-xs">
+                {cardIncluded ? "Completado" : cardPrepared ? "Marcar" : "Espera"}
+              </span>
+            </button>
+          </>
+        ) : null}
+
+        {gift.hidePrices ? (
+          <button
+            type="button"
+            disabled={packagingConfirmed || Boolean(busyOperation)}
+            onClick={() => void runOperation("mark_price_free_packaging_confirmed")}
+            className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-sm font-black transition ${
+              packagingConfirmed
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-slate-300 bg-slate-900 text-white hover:bg-slate-800"
+            } disabled:cursor-default`}
+          >
+            <span className="flex items-center gap-2">
+              {busyOperation === "mark_price_free_packaging_confirmed" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : packagingConfirmed ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <EyeOff className="h-4 w-4" />
+              )}
+              Empaque confirmado sin precios
+            </span>
+            <span className="text-xs">{packagingConfirmed ? "Completado" : "Marcar"}</span>
+          </button>
+        ) : null}
+      </div>
+
+      {errorMessage ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-800">
+          {errorMessage}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function GiftOperationalSummary({
+  orderId,
+  siteId,
   gift,
   originalNotes,
 }: {
+  orderId: string;
+  siteId: string;
   gift: GiftSnapshot;
   originalNotes: string | null;
 }) {
@@ -153,7 +315,9 @@ function GiftOperationalSummary({
       </div>
 
       <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-950">
-        <div className="text-xs font-black uppercase tracking-wide text-cyan-700">Contacto durante la entrega</div>
+        <div className="text-xs font-black uppercase tracking-wide text-cyan-700">
+          Contacto durante la entrega
+        </div>
         <div className="mt-1 font-bold">{contactInstruction(gift)}</div>
       </div>
 
@@ -179,20 +343,29 @@ function GiftOperationalSummary({
         </div>
       )}
 
-      {gift.hidePrices ? (
-        <div className="rounded-xl border-2 border-slate-900 bg-slate-900 px-3 py-2 text-sm font-black text-white">
-          EMPAQUE SIN PRECIOS
-        </div>
-      ) : null}
+      <GiftChecklistActions orderId={orderId} siteId={siteId} gift={gift} />
 
       {originalNotes ? (
         <div className="rounded-xl border border-amber-200 bg-white p-3">
-          <div className="text-xs font-black uppercase tracking-wide text-amber-700">Notas del cliente</div>
-          <div className="mt-1 whitespace-pre-wrap text-sm font-semibold text-slate-800">{originalNotes}</div>
+          <div className="text-xs font-black uppercase tracking-wide text-amber-700">
+            Notas del cliente
+          </div>
+          <div className="mt-1 whitespace-pre-wrap text-sm font-semibold text-slate-800">
+            {originalNotes}
+          </div>
         </div>
       ) : null}
     </div>
   );
+}
+
+function giftOperationLabel(operation: string) {
+  const labels: Record<string, string> = {
+    mark_card_prepared: "Tarjeta preparada",
+    mark_card_included: "Tarjeta incluida en el pedido",
+    mark_price_free_packaging_confirmed: "Empaque sin precios confirmado",
+  };
+  return labels[operation] || operation;
 }
 
 function enhanceGiftOrder(entry: OrderEntry): OrderEntry {
@@ -210,10 +383,19 @@ function enhanceGiftOrder(entry: OrderEntry): OrderEntry {
     guestName: recipientLabel,
     guestPhone: gift.recipientPhone || entry.guestPhone,
     sourceLabel: gift.isSurprise ? `${entry.sourceLabel} · Sorpresa` : entry.sourceLabel,
+    events: entry.events.map((event) => ({
+      ...event,
+      operation: giftOperationLabel(event.operation),
+    })),
     order: {
       ...entry.order,
       notes: (
-        <GiftOperationalSummary gift={gift} originalNotes={originalNotes} />
+        <GiftOperationalSummary
+          orderId={entry.order.id}
+          siteId={entry.order.site_id || ""}
+          gift={gift}
+          originalNotes={originalNotes}
+        />
       ) as unknown as string,
     },
   };
