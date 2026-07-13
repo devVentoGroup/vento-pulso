@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type MouseEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 
@@ -21,6 +22,10 @@ type OpsAction =
   | "mark_in_transit"
   | "mark_delivered"
   | "mark_cancelled";
+type GiftOperation =
+  | "mark_card_prepared"
+  | "mark_card_included"
+  | "mark_price_free_packaging_confirmed";
 
 type OrderRow = {
   id: string;
@@ -30,6 +35,7 @@ type OrderRow = {
   dispatch_status: string | null;
   dispatch_partner: string | null;
   dispatch_reference: string | null;
+  guest_info?: Record<string, unknown> | null;
   [key: string]: unknown;
 };
 
@@ -260,6 +266,9 @@ function operationLabel(operation: string | null) {
     mark_delivered: "Entregado",
     mark_cancelled: "Cancelado",
     assign_dispatch: "Domiciliario asignado",
+    mark_card_prepared: "Tarjeta preparada",
+    mark_card_included: "Tarjeta incluida en el pedido",
+    mark_price_free_packaging_confirmed: "Empaque sin precios confirmado",
   };
   return operation ? labels[operation] || operation : "Actualización";
 }
@@ -293,6 +302,49 @@ function updateHeaderCounter(label: string, value: number) {
     if (valueNode instanceof HTMLElement) valueNode.textContent = String(value);
     return;
   }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+}
+
+function patchGiftEntry(entry: OrderEntry, operation: GiftOperation): OrderEntry {
+  const guestInfo = asRecord(entry.order.guest_info);
+  const gift = asRecord(guestInfo.gift);
+  const now = new Date().toISOString();
+
+  if (operation === "mark_card_prepared") {
+    gift.card_status = "prepared";
+    gift.card_prepared_at = now;
+  } else if (operation === "mark_card_included") {
+    gift.card_status = "included";
+    gift.card_included_at = now;
+  } else {
+    gift.price_free_packaging_confirmed_at = now;
+  }
+
+  return {
+    ...entry,
+    order: {
+      ...entry.order,
+      guest_info: {
+        ...guestInfo,
+        gift,
+      },
+    },
+  };
+}
+
+function giftOperationFromButton(button: HTMLButtonElement): GiftOperation | null {
+  const text = button.textContent || "";
+  if (text.includes("Tarjeta preparada")) return "mark_card_prepared";
+  if (text.includes("Tarjeta incluida en el pedido")) return "mark_card_included";
+  if (text.includes("Empaque confirmado sin precios")) {
+    return "mark_price_free_packaging_confirmed";
+  }
+  return null;
 }
 
 export function OrdersBoardLive(props: OrdersBoardLiveProps) {
@@ -449,6 +501,101 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
     [props.fulfillment, props.siteId, props.view, supabase],
   );
 
+  const runOptimisticDispatch = useCallback(
+    async (
+      orderId: string,
+      dispatchPartner: string,
+      dispatchReference: string,
+      submitter: HTMLButtonElement | null,
+    ) => {
+      if (operationInFlightRef.current.has(orderId)) return;
+      if (!dispatchPartner && !dispatchReference) {
+        setOperationError("Ingresa aliado o referencia para asignar domicilio.");
+        return;
+      }
+
+      const currentEntry = ordersRef.current.find((entry) => entry.order.id === orderId);
+      if (!currentEntry) return;
+
+      operationInFlightRef.current.add(orderId);
+      setOperationError(null);
+      if (submitter) submitter.disabled = true;
+      const snapshot = ordersRef.current;
+
+      setOrders((current) =>
+        current.map((entry) =>
+          entry.order.id === orderId
+            ? updateEntry(entry, {
+                dispatch_status: "assigned",
+                dispatch_partner: dispatchPartner || null,
+                dispatch_reference: dispatchReference || null,
+              })
+            : entry,
+        ),
+      );
+
+      const { data, error } = await supabase.rpc("update_order_operational_state", {
+        p_order_id: orderId,
+        p_site_id: props.siteId,
+        p_operation: "assign_dispatch",
+        p_dispatch_partner: dispatchPartner || null,
+        p_dispatch_reference: dispatchReference || null,
+        p_metadata: { source: "pulso_orders_board_live" },
+      });
+
+      const ok = !error && Boolean((data as { ok?: boolean } | null)?.ok);
+      if (!ok) {
+        setOrders(snapshot);
+        setOperationError(error?.message || "No pudimos asignar el domiciliario.");
+      }
+
+      operationInFlightRef.current.delete(orderId);
+      if (submitter) submitter.disabled = false;
+    },
+    [props.siteId, supabase],
+  );
+
+  const runOptimisticGiftOperation = useCallback(
+    async (orderId: string, operation: GiftOperation, button: HTMLButtonElement) => {
+      if (operationInFlightRef.current.has(orderId)) return;
+      if (!ordersRef.current.some((entry) => entry.order.id === orderId)) return;
+
+      operationInFlightRef.current.add(orderId);
+      setOperationError(null);
+      button.disabled = true;
+      const snapshot = ordersRef.current;
+
+      setOrders((current) =>
+        current.map((entry) =>
+          entry.order.id === orderId ? patchGiftEntry(entry, operation) : entry,
+        ),
+      );
+
+      const { data, error } = await supabase.rpc("update_order_gift_operational_state", {
+        p_order_id: orderId,
+        p_site_id: props.siteId,
+        p_operation: operation,
+        p_metadata: { source: "pulso_orders_board_live" },
+      });
+
+      const ok = !error && (data == null || Boolean((data as { ok?: boolean }).ok ?? true));
+      if (!ok) {
+        setOrders(snapshot);
+        const messages: Record<string, string> = {
+          card_must_be_prepared_first: "Primero debes marcar la tarjeta como preparada.",
+          card_not_requested: "Este regalo no solicitó tarjeta.",
+          permission_denied: "No tienes permiso para actualizar este checklist.",
+          order_not_found: "No se encontró el pedido.",
+        };
+        setOperationError(messages[error?.message || ""] || error?.message || "No pudimos actualizar el checklist.");
+      }
+
+      operationInFlightRef.current.delete(orderId);
+      button.disabled = false;
+    },
+    [props.siteId, supabase],
+  );
+
   const handleSubmitCapture = useCallback(
     (event: FormEvent<HTMLDivElement>) => {
       const form = event.target;
@@ -456,12 +603,26 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
 
       const nativeEvent = event.nativeEvent as SubmitEvent;
       const submitter = nativeEvent.submitter;
-      if (!(submitter instanceof HTMLButtonElement) || submitter.name !== "op") return;
-
-      const operation = submitter.value as OpsAction;
+      const submitButton = submitter instanceof HTMLButtonElement ? submitter : null;
       const formData = new FormData(form);
       const orderId = String(formData.get("order_id") || "");
-      if (!orderId || !buildOperationButtons({
+      if (!orderId) return;
+
+      if (formData.has("dispatch_partner") || formData.has("dispatch_reference")) {
+        event.preventDefault();
+        event.stopPropagation();
+        void runOptimisticDispatch(
+          orderId,
+          String(formData.get("dispatch_partner") || "").trim(),
+          String(formData.get("dispatch_reference") || "").trim(),
+          submitButton,
+        );
+        return;
+      }
+
+      if (!submitButton || submitButton.name !== "op") return;
+      const operation = submitButton.value as OpsAction;
+      if (!buildOperationButtons({
         ...(ordersRef.current.find((entry) => entry.order.id === orderId)?.order || {}),
       } as OrderRow).some((button) => button.op === operation)) {
         return;
@@ -469,9 +630,29 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
 
       event.preventDefault();
       event.stopPropagation();
-      void runOptimisticOperation(orderId, operation, submitter);
+      void runOptimisticOperation(orderId, operation, submitButton);
     },
-    [runOptimisticOperation],
+    [runOptimisticDispatch, runOptimisticOperation],
+  );
+
+  const handleClickCapture = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const button = target.closest("button");
+      if (!(button instanceof HTMLButtonElement)) return;
+      const operation = giftOperationFromButton(button);
+      if (!operation) return;
+
+      const dialog = button.closest('[role="dialog"]');
+      const orderInput = dialog?.querySelector('input[name="order_id"]');
+      if (!(orderInput instanceof HTMLInputElement) || !orderInput.value) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      void runOptimisticGiftOperation(orderInput.value, operation, button);
+    },
+    [runOptimisticGiftOperation],
   );
 
   useEffect(() => {
@@ -536,7 +717,7 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
   ]);
 
   return (
-    <div onSubmitCapture={handleSubmitCapture}>
+    <div onSubmitCapture={handleSubmitCapture} onClickCapture={handleClickCapture}>
       {operationError ? (
         <div className="ui-alert ui-alert--error mb-3">
           {operationError}
