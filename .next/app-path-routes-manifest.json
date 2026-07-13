@@ -4,6 +4,7 @@
   "/no-access/page": "/no-access",
   "/orders/page": "/orders",
   "/page": "/",
+  "/sales-imports/page": "/sales-imports",
   "/salon/page": "/salon",
   "/scanner/page": "/scanner"
 }

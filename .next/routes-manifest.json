@@ -53,6 +53,12 @@
       "namedRegex": "^/orders(?:/)?$"
     },
     {
+      "page": "/sales-imports",
+      "regex": "^/sales\\-imports(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/sales\\-imports(?:/)?$"
+    },
+    {
       "page": "/salon",
       "regex": "^/salon(?:/)?$",
       "routeKeys": {},

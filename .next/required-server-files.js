@@ -140,7 +140,7 @@ self.__SERVER_FILES_MANIFEST={
       "isExperimentalCompile": false
     }
   },
-  "appDir": "C:\\Vento-Projects\\vento-pulso",
+  "appDir": "C:\\Users\\User\\devVentoGroup\\vento-pulso",
   "relativeAppDir": "",
   "files": [
     ".next\\routes-manifest.json",

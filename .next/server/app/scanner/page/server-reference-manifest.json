@@ -1,6 +1,6 @@
 {
   "node": {
-    "6077cee1c9afff4589c31de7bd45354f261f656469": {
+    "706cab89931cfeab4c40f8de9a585f44fc8070c745": {
       "workers": {
         "app/scanner/page": {
           "moduleId": 60035,
@@ -15,7 +15,7 @@
       "exportedName": "processRedemptionAction",
       "filename": "src/modules/pos/actions/validate-redemption.action.ts"
     },
-    "400c6141746e9bf6fbb341f7ddbd568b7abad602bd": {
+    "4020737cdf5fa428cc0f15c23f599b7165ab2f29f7": {
       "workers": {
         "app/scanner/page": {
           "moduleId": 60035,
@@ -30,7 +30,7 @@
       "exportedName": "awardLoyaltyPointsAction",
       "filename": "src/modules/pos/actions/award-loyalty.action.ts"
     },
-    "60989be4fd59f5961c80372c6feaeec1d8e47122e7": {
+    "60efa9281af019012d070aadc303e12ea15eadfcfc": {
       "workers": {
         "app/scanner/page": {
           "moduleId": 60035,
