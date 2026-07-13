@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   Banknote,
   Bike,
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Copy,
   History,
   MapPin,
   MessageCircle,
@@ -37,6 +39,8 @@ type OrderRow = {
   created_at: string;
   status: string | null;
   payment_status: string | null;
+  subtotal_amount: number | string | null;
+  delivery_fee_amount: number | string | null;
   total_amount: number | string | null;
   fulfillment_type: string | null;
   dispatch_status: string | null;
@@ -129,6 +133,10 @@ type OrderCardData = {
   guestName: string | null;
   guestPhone: string | null;
   fullAddress: string | null;
+  addressLine: string | null;
+  addressReference: string | null;
+  deliveryDistanceKm: number | null;
+  billedDistanceKm: number | null;
   mapsHref: string | null;
   orderCode: string;
   statusLabel: string;
@@ -233,6 +241,45 @@ function formatCardTime(value: string) {
   } catch {
     return value;
   }
+}
+
+function formatDistance(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return null;
+  return `${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 }).format(value)} km`;
+}
+
+function parseDeliveryReference(value: string | null) {
+  const result = {
+    type: null as string | null,
+    label: null as string | null,
+    details: null as string | null,
+    instructions: null as string | null,
+    fallback: null as string | null,
+  };
+
+  if (!value) return result;
+
+  const unmatched: string[] = [];
+  value.split("|").map((part) => part.trim()).filter(Boolean).forEach((part) => {
+    const separatorIndex = part.indexOf(":");
+    if (separatorIndex < 0) {
+      unmatched.push(part);
+      return;
+    }
+
+    const key = part.slice(0, separatorIndex).trim().toLowerCase();
+    const content = part.slice(separatorIndex + 1).trim();
+    if (!content) return;
+
+    if (key === "tipo") result.type = content;
+    else if (key === "etiqueta") result.label = content;
+    else if (key === "detalles") result.details = content;
+    else if (key === "entrega" || key === "instrucciones") result.instructions = content;
+    else unmatched.push(part);
+  });
+
+  result.fallback = unmatched.length > 0 ? unmatched.join(" · ") : null;
+  return result;
 }
 
 function optionEffectLabel(effectType: string | null) {
@@ -391,7 +438,7 @@ function OrderCard({
           <div className={`truncate text-xs font-bold ${data.paymentBlocked ? "text-amber-700" : "text-slate-500"}`}>
             {data.paymentLabel}
           </div>
-          {order.fulfillment_type === "delivery" ? (
+          {order.fulfillment_type === "delivery" && order.status !== "cancelled" ? (
             <div className="mt-0.5 truncate text-[11px] text-slate-400">Despacho: {data.dispatchLabel}</div>
           ) : null}
         </div>
@@ -413,6 +460,7 @@ export function OrdersBoard({
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ModalTab>("order");
   const [billingDetailsOpen, setBillingDetailsOpen] = useState(false);
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [unreadByOrder, setUnreadByOrder] = useState<Record<string, number>>({});
   const selectedOrderIdRef = useRef<string | null>(null);
   const activeTabRef = useRef<ModalTab>("order");
@@ -424,6 +472,16 @@ export function OrdersBoard({
   );
 
   const selectedBilling = selected?.billing ?? null;
+  const selectedItemsSubtotal = selected
+    ? selected.items.reduce((sum, item) => sum + Number(item.total_amount || 0), 0)
+    : 0;
+  const selectedProductSubtotal = selected
+    ? Number(selected.order.subtotal_amount ?? selectedItemsSubtotal)
+    : 0;
+  const selectedDeliveryFee = selected
+    ? Number(selected.order.delivery_fee_amount ?? 0)
+    : 0;
+  const selectedAddressMeta = parseDeliveryReference(selected?.addressReference ?? null);
 
   const totalUnread = useMemo(
     () => Object.values(unreadByOrder).reduce((sum, count) => sum + count, 0),
@@ -567,6 +625,15 @@ export function OrdersBoard({
     }
   };
 
+  const copySelectedAddress = async () => {
+    const value = selected?.addressLine || selected?.fullAddress;
+    if (!selected || !value || typeof navigator === "undefined" || !navigator.clipboard) return;
+
+    await navigator.clipboard.writeText(value);
+    setCopiedOrderId(selected.order.id);
+    window.setTimeout(() => setCopiedOrderId(null), 1800);
+  };
+
   return (
     <>
       {totalUnread > 0 ? (
@@ -584,14 +651,44 @@ export function OrdersBoard({
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {orders.map((entry) => (
-          <OrderCard
-            key={entry.order.id}
-            data={entry}
-            unreadCount={unreadByOrder[entry.order.id] || 0}
-            onOpen={() => openOrder(entry.order.id)}
-          />
-        ))}
+        {orders.map((entry) => {
+          const unreadCount = unreadByOrder[entry.order.id] || 0;
+          return (
+            <div key={entry.order.id} className="relative">
+              <OrderCard
+                data={entry}
+                unreadCount={unreadCount}
+                onOpen={() => openOrder(entry.order.id)}
+              />
+              {entry.conversation ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new CustomEvent("vento-pulso:open-order-chat", {
+                        detail: { orderId: entry.order.id },
+                      }),
+                    );
+                  }}
+                  className={`absolute bottom-3 right-3 z-10 inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-black shadow-lg transition ${
+                    unreadCount > 0
+                      ? "bg-red-600 text-white hover:bg-red-700"
+                      : "border border-slate-200 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"
+                  }`}
+                  aria-label={`Abrir chat del pedido ${entry.orderCode}`}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Chat
+                  {unreadCount > 0 ? (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] text-white">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
 
       {selected ? (
@@ -677,6 +774,24 @@ export function OrdersBoard({
               {activeTab === "order" ? (
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
                   <div className="space-y-4">
+                    {selected.order.status === "cancelled" ? (
+                      <section className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+                          <div>
+                            <div className="text-sm font-black text-red-950">
+                              {selected.order.payment_status === "failed" ? "Pago fallido" : "Pedido cancelado"}
+                            </div>
+                            <div className="mt-1 text-sm font-semibold text-red-800">
+                              {selected.order.payment_status === "failed"
+                                ? "El pedido fue cancelado porque el pago no fue aprobado."
+                                : "Este pedido ya no requiere preparación ni despacho."}
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    ) : null}
+
                     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
@@ -685,7 +800,7 @@ export function OrdersBoard({
                             {selected.itemCount || selected.items.length} unidad{(selected.itemCount || selected.items.length) === 1 ? "" : "es"}
                           </div>
                         </div>
-                        <div className="text-lg font-black text-slate-950">{formatMoney(selected.order.total_amount)}</div>
+                        <div className="text-lg font-black text-slate-950">{formatMoney(selectedProductSubtotal)}</div>
                       </div>
 
                       {selected.items.length === 0 ? (
@@ -729,35 +844,37 @@ export function OrdersBoard({
                       </section>
                     ) : null}
 
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="mb-3">
-                        <div className="text-sm font-black text-slate-950">Acciones del pedido</div>
-                        <div className="text-xs text-slate-500">Avanza el pedido según su estado operativo.</div>
-                      </div>
+                    {selected.operationButtons.length > 0 || selected.paymentBlocked ? (
+                      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="mb-3">
+                          <div className="text-sm font-black text-slate-950">Acciones del pedido</div>
+                          <div className="text-xs text-slate-500">Avanza el pedido según su estado operativo.</div>
+                        </div>
 
-                      {selected.paymentBlocked ? (
-                        <div className="ui-alert ui-alert--warn mb-3">Pago pendiente: este domicilio no debe prepararse hasta que Wompi lo confirme.</div>
-                      ) : null}
+                        {selected.paymentBlocked ? (
+                          <div className="ui-alert ui-alert--warn mb-3">Pago pendiente: este domicilio no debe prepararse hasta que Wompi lo confirme.</div>
+                        ) : null}
 
-                      <form action={updateOperationalOrderAction} className="flex flex-wrap gap-2">
-                        <input type="hidden" name="order_id" value={selected.order.id} />
-                        <input type="hidden" name="site_id" value={siteId} />
-                        <input type="hidden" name="view" value={view} />
-                        <input type="hidden" name="fulfillment" value={fulfillment} />
-                        {selected.operationButtons.map((button) => (
-                          <button
-                            key={`${selected.order.id}-${button.op}`}
-                            type="submit"
-                            name="op"
-                            value={button.op}
-                            className={`ui-btn h-10 px-4 text-sm ${button.op === "mark_cancelled" ? "ui-btn--danger" : "ui-btn--primary"}`}
-                          >
-                            <ActionIcon op={button.op} />
-                            {button.label}
-                          </button>
-                        ))}
-                      </form>
-                    </section>
+                        <form action={updateOperationalOrderAction} className="flex flex-wrap gap-2">
+                          <input type="hidden" name="order_id" value={selected.order.id} />
+                          <input type="hidden" name="site_id" value={siteId} />
+                          <input type="hidden" name="view" value={view} />
+                          <input type="hidden" name="fulfillment" value={fulfillment} />
+                          {selected.operationButtons.map((button) => (
+                            <button
+                              key={`${selected.order.id}-${button.op}`}
+                              type="submit"
+                              name="op"
+                              value={button.op}
+                              className={`ui-btn h-10 px-4 text-sm ${button.op === "mark_cancelled" ? "ui-btn--danger" : "ui-btn--primary"}`}
+                            >
+                              <ActionIcon op={button.op} />
+                              {button.label}
+                            </button>
+                          ))}
+                        </form>
+                      </section>
+                    ) : null}
                   </div>
 
                   <div className="space-y-4">
@@ -816,25 +933,61 @@ export function OrdersBoard({
 
                       <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                         <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Tipo</div><div className="font-bold text-slate-900">{selected.fulfillmentLabel}</div></div>
-                        <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Despacho</div><div className="font-bold text-slate-900">{selected.dispatchLabel}</div></div>
-                        {selected.order.delivery_zone ? <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Zona</div><div className="font-bold text-slate-900">{selected.order.delivery_zone}</div></div> : null}
+                        {selected.order.status !== "cancelled" ? (
+                          <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Despacho</div><div className="font-bold text-slate-900">{selected.dispatchLabel}</div></div>
+                        ) : null}
+                        {selected.order.fulfillment_type === "delivery" && selected.deliveryDistanceKm != null ? (
+                          <div>
+                            <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Distancia real</div>
+                            <div className="font-bold text-slate-900">{formatDistance(selected.deliveryDistanceKm)}</div>
+                            {selected.billedDistanceKm != null && selected.billedDistanceKm !== selected.deliveryDistanceKm ? (
+                              <div className="mt-0.5 text-xs font-semibold text-slate-500">Tarifa: hasta {formatDistance(selected.billedDistanceKm)}</div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Pago</div><div className="font-bold text-slate-900">{selected.paymentLabel}</div></div>
                       </div>
 
                       {selected.order.fulfillment_type === "delivery" ? (
-                        <div className="mt-4 border-t border-slate-100 pt-4">
-                          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Dirección</div>
-                          <div className="mt-1 text-sm font-semibold leading-6 text-slate-800">{selected.fullAddress || "Sin dirección cargada"}</div>
-                          {selected.mapsHref ? (
-                            <a href={selected.mapsHref} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                              <MapPin className="h-4 w-4" /> Abrir en Google Maps
-                            </a>
+                        <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                          <div>
+                            <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Dirección</div>
+                            <div className="mt-1 text-sm font-semibold leading-6 text-slate-800">{selected.addressLine || "Sin dirección cargada"}</div>
+                          </div>
+
+                          {selectedAddressMeta.details || selectedAddressMeta.type || selectedAddressMeta.label || selectedAddressMeta.fallback ? (
+                            <div>
+                              <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Detalles</div>
+                              <div className="mt-1 text-sm font-semibold leading-6 text-slate-800">
+                                {[selectedAddressMeta.type, selectedAddressMeta.label, selectedAddressMeta.details, selectedAddressMeta.fallback].filter(Boolean).join(" · ")}
+                              </div>
+                            </div>
                           ) : null}
+
+                          {selectedAddressMeta.instructions ? (
+                            <div>
+                              <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Instrucciones</div>
+                              <div className="mt-1 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">{selectedAddressMeta.instructions}</div>
+                            </div>
+                          ) : null}
+
+                          <div className="flex flex-wrap gap-2">
+                            {selected.mapsHref ? (
+                              <a href={selected.mapsHref} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                <MapPin className="h-4 w-4" /> Abrir en Google Maps
+                              </a>
+                            ) : null}
+                            {selected.addressLine ? (
+                              <button type="button" onClick={() => void copySelectedAddress()} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                <Copy className="h-4 w-4" /> {copiedOrderId === selected.order.id ? "Copiada" : "Copiar dirección"}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       ) : null}
                     </section>
 
-                    {selected.order.fulfillment_type === "delivery" ? (
+                    {selected.order.fulfillment_type === "delivery" && selected.order.status !== "cancelled" ? (
                       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <div className="flex items-center gap-2"><Truck className="h-4 w-4 text-cyan-600" /><div className="text-sm font-black text-slate-950">Domiciliario</div></div>
                         <div className="mt-2 text-xs text-slate-500">Actual: {selected.order.dispatch_partner || "Sin asignar"}{selected.order.dispatch_reference ? ` · ${selected.order.dispatch_reference}` : ""}</div>
@@ -854,7 +1007,25 @@ export function OrdersBoard({
 
                     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center gap-2"><Banknote className="h-4 w-4 text-cyan-600" /><div className="text-sm font-black text-slate-950">Resumen</div></div>
-                      <div className="mt-3 flex items-center justify-between gap-4"><div className="text-sm font-semibold text-slate-500">Total del pedido</div><div className="text-xl font-black text-slate-950">{formatMoney(selected.order.total_amount)}</div></div>
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="text-sm font-semibold text-slate-500">Productos</div>
+                          <div className="text-sm font-black text-slate-900">{formatMoney(selectedProductSubtotal)}</div>
+                        </div>
+                        {selectedDeliveryFee > 0 ? (
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="text-sm font-semibold text-slate-500">Domicilio</div>
+                            <div className="text-sm font-black text-slate-900">{formatMoney(selectedDeliveryFee)}</div>
+                          </div>
+                        ) : null}
+                        <div className="mt-2 flex items-center justify-between gap-4 border-t border-slate-200 pt-3">
+                          <div>
+                            <div className="text-sm font-black text-slate-950">Total del pedido</div>
+                            <div className="mt-0.5 text-xs font-semibold text-slate-500">Pago: {selected.paymentLabel}</div>
+                          </div>
+                          <div className="text-xl font-black text-slate-950">{formatMoney(selected.order.total_amount)}</div>
+                        </div>
+                      </div>
                     </section>
                   </div>
                 </div>

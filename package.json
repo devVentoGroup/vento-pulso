@@ -3,9 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "python3 scripts/run-order-modal-operational-improvements.py && python3 scripts/apply-orders-chat-inbox-mount.py",
     "dev": "next dev",
-    "prebuild": "python3 scripts/run-order-modal-operational-improvements.py && python3 scripts/apply-orders-chat-inbox-mount.py",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

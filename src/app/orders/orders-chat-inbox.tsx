@@ -319,6 +319,29 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
     [loadMessages],
   );
 
+
+  useEffect(() => {
+    const handleOpenOrderChat = (event: Event) => {
+      const orderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId;
+      setPanelOpen(true);
+      if (!orderId) {
+        void loadInbox();
+        return;
+      }
+
+      const item = items.find((candidate) => candidate.conversation.order_id === orderId);
+      if (item) {
+        void openConversation(item);
+        return;
+      }
+
+      void loadInbox();
+    };
+
+    window.addEventListener("vento-pulso:open-order-chat", handleOpenOrderChat);
+    return () => window.removeEventListener("vento-pulso:open-order-chat", handleOpenOrderChat);
+  }, [items, loadInbox, openConversation]);
+
   const closeConversation = () => {
     setSelectedOrderId(null);
     setSelectedConversation(null);

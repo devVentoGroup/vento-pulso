@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { PackageCheck } from "lucide-react";
 
 import { requireAppAccess } from "@/lib/auth/guard";
-import { OrdersBoard } from "./orders-board";
+import { OrdersBoardLive } from "./orders-board-live";
 import { OrdersLiveBridge } from "./orders-live-bridge";
 
 type PageSearchParams = {
@@ -35,6 +35,8 @@ type OrderRow = {
   created_at: string;
   status: string | null;
   payment_status: string | null;
+  subtotal_amount: number | string | null;
+  delivery_fee_amount: number | string | null;
   total_amount: number | string | null;
   fulfillment_type: string | null;
   dispatch_status: string | null;
@@ -753,7 +755,7 @@ export default async function OrdersOperationalPage({
   let query = supabase
     .from("orders")
     .select(
-      "id,created_at,status,payment_status,total_amount,fulfillment_type,dispatch_status,site_id,source,guest_info,contact_phone,notes,delivery_address,delivery_zone,dispatch_partner,dispatch_reference"
+      "id,created_at,status,payment_status,subtotal_amount,delivery_fee_amount,total_amount,fulfillment_type,dispatch_status,site_id,source,guest_info,contact_phone,notes,delivery_address,delivery_zone,dispatch_partner,dispatch_reference"
     )
     .eq("site_id", siteId ?? "")
     .order("created_at", { ascending: false })
@@ -954,6 +956,10 @@ export default async function OrdersOperationalPage({
       guestName: extractText(order.guest_info, "contact_name"),
       guestPhone: extractText(order.guest_info, "contact_phone") || order.contact_phone,
       fullAddress: formatAddress(order.delivery_address),
+      addressLine: extractText(order.delivery_address, "line1"),
+      addressReference: extractText(order.delivery_address, "reference"),
+      deliveryDistanceKm: extractNumber(order.delivery_address, "distance_km"),
+      billedDistanceKm: extractNumber(order.delivery_address, "billed_distance_km"),
       mapsHref: buildMapsHref(order.delivery_address),
       orderCode: order.id.slice(0, 8).toUpperCase(),
       statusLabel: STATUS_LABELS[statusKey] || statusKey,
@@ -1093,7 +1099,7 @@ export default async function OrdersOperationalPage({
           </div>
         </div>
       ) : (
-        <OrdersBoard
+        <OrdersBoardLive
           orders={boardOrders}
           siteId={siteId ?? ""}
           view={view}

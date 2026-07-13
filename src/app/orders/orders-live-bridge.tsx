@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { OrdersChatInbox } from "./orders-chat-inbox";
 
 type LiveOrderRow = {
   id: string;
@@ -157,9 +158,8 @@ export function OrdersLiveBridge({ siteId }: OrdersLiveBridgeProps) {
 
       await playAlertSound();
       sendBrowserNotification(title, body);
-      scheduleRefresh();
     },
-    [playAlertSound, scheduleRefresh, sendBrowserNotification],
+    [playAlertSound, sendBrowserNotification],
   );
 
   const handleEnableAlerts = useCallback(async () => {
@@ -222,6 +222,7 @@ export function OrdersLiveBridge({ siteId }: OrdersLiveBridgeProps) {
             body: `${fulfillmentLabel} · ${totalLabel}`,
             notice: `Nuevo pedido ${fulfillmentLabel.toLowerCase()} recibido.`,
           });
+          scheduleRefresh();
         },
       )
       .on(
@@ -245,10 +246,7 @@ export function OrdersLiveBridge({ siteId }: OrdersLiveBridgeProps) {
               body: `Domicilio listo para preparar · ${formatMoney(nextOrder.total_amount)}`,
               notice: "Un domicilio ya tiene pago aprobado y puede operarse.",
             });
-            return;
           }
-
-          scheduleRefresh();
         },
       )
       .subscribe((status) => {
@@ -366,6 +364,7 @@ export function OrdersLiveBridge({ siteId }: OrdersLiveBridgeProps) {
           </span>
         ) : null}
       </div>
+      <OrdersChatInbox siteId={siteId} />
     </div>
   );
 }
