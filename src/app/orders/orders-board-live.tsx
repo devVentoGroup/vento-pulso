@@ -1,27 +1,66 @@
 "use client";
 
-import type { ComponentProps } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
 import { OrdersBoard as DecoratedOrdersBoard } from "./orders-board";
 
-type OrdersBoardProps = ComponentProps<typeof DecoratedOrdersBoard>;
-type OrderEntry = OrdersBoardProps["orders"][number];
-type OrderRow = OrderEntry["order"];
-type OperationButton = OrderEntry["operationButtons"][number];
+type ViewFilter = "active" | "delivered" | "cancelled" | "all";
+type FulfillmentFilter = "all" | "delivery" | "pickup" | "on_premise";
+type OpsAction =
+  | "mark_preparing"
+  | "mark_ready"
+  | "mark_in_transit"
+  | "mark_delivered"
+  | "mark_cancelled";
 
-type LiveOrderPatch = Pick<
-  OrderRow,
-  | "id"
-  | "status"
-  | "payment_status"
-  | "fulfillment_type"
-  | "dispatch_status"
-  | "dispatch_partner"
-  | "dispatch_reference"
->;
+type OrderRow = {
+  id: string;
+  status: string | null;
+  payment_status: string | null;
+  fulfillment_type: string | null;
+  dispatch_status: string | null;
+  dispatch_partner: string | null;
+  dispatch_reference: string | null;
+  [key: string]: unknown;
+};
+
+type OperationButton = {
+  op: OpsAction;
+  label: string;
+};
+
+type OrderEntry = {
+  order: OrderRow;
+  statusLabel: string;
+  statusTone: string;
+  paymentLabel: string;
+  dispatchLabel: string;
+  paymentBlocked: boolean;
+  operationButtons: OperationButton[];
+  [key: string]: unknown;
+};
+
+type LiveOrderPatch = {
+  id: string;
+  status: string | null;
+  payment_status: string | null;
+  fulfillment_type: string | null;
+  dispatch_status: string | null;
+  dispatch_partner: string | null;
+  dispatch_reference: string | null;
+};
+
+type OrdersBoardLiveProps = {
+  orders: OrderEntry[];
+  siteId: string;
+  view: ViewFilter;
+  fulfillment: FulfillmentFilter;
+  updateOperationalOrderAction: (...args: any[]) => any;
+  assignDispatchOrderAction: (...args: any[]) => any;
+  sendOrderMessageLiveAction: (...args: any[]) => any;
+};
 
 const ACTIVE_STATUSES = new Set([
   "pending",
@@ -75,53 +114,44 @@ const DISPATCH_LABELS: Record<string, string> = {
   cancelled: "Cancelado",
 };
 
-function paymentLabel(order: OrderRow) {
+function formatPaymentLabel(order: OrderRow) {
   if (order.fulfillment_type === "pickup") {
     return order.payment_status === "paid" ? "Pagado" : "Pago al recoger";
   }
-
   if (order.fulfillment_type === "on_premise") {
     return order.payment_status === "paid" ? "Pagado" : "Pago en sede";
   }
-
   if (!order.payment_status) return "Sin pagar";
   return PAYMENT_LABELS[order.payment_status] || order.payment_status;
 }
 
-function paymentBlocked(order: OrderRow) {
+function requiresPayment(order: OrderRow) {
   if (order.status === "cancelled") return false;
   return order.fulfillment_type === "delivery" && order.payment_status !== "paid";
 }
 
-function operationButtons(order: OrderRow): OperationButton[] {
+function buildOperationButtons(order: OrderRow): OperationButton[] {
   const status = order.status || "pending";
   const buttons: OperationButton[] = [];
 
-  if (paymentBlocked(order)) {
-    buttons.push({ op: "mark_cancelled", label: "Cancelar" });
-    return buttons;
+  if (requiresPayment(order)) {
+    return [{ op: "mark_cancelled", label: "Cancelar" }];
   }
-
   if (status === "pending" || status === "confirmed") {
     buttons.push({ op: "mark_preparing", label: "Preparando" });
   }
-
   if (status === "preparing") {
     buttons.push({ op: "mark_ready", label: "Listo despacho" });
   }
-
-  if (order.fulfillment_type === "delivery" && status === "ready_for_dispatch") {
+  if (status === "ready_for_dispatch" && order.fulfillment_type === "delivery") {
     buttons.push({ op: "mark_in_transit", label: "En camino" });
   }
-
   if (status === "ready_for_dispatch" && order.fulfillment_type !== "delivery") {
     buttons.push({ op: "mark_delivered", label: "Entregado" });
   }
-
   if (status === "in_transit" || status === "on_the_way") {
     buttons.push({ op: "mark_delivered", label: "Entregado" });
   }
-
   if (status !== "delivered" && status !== "cancelled") {
     buttons.push({ op: "mark_cancelled", label: "Cancelar" });
   }
@@ -129,43 +159,42 @@ function operationButtons(order: OrderRow): OperationButton[] {
   return buttons;
 }
 
-function matchesView(
+function matchesCurrentView(
   order: Pick<OrderRow, "status" | "fulfillment_type">,
-  view: OrdersBoardProps["view"],
-  fulfillment: OrdersBoardProps["fulfillment"],
+  view: ViewFilter,
+  fulfillment: FulfillmentFilter,
 ) {
   if (fulfillment !== "all" && order.fulfillment_type !== fulfillment) return false;
-
   if (view === "active") return ACTIVE_STATUSES.has(order.status || "");
   if (view === "delivered") return order.status === "delivered";
   if (view === "cancelled") return order.status === "cancelled";
   return true;
 }
 
-function applyPatch(entry: OrderEntry, patch: LiveOrderPatch): OrderEntry {
-  const nextOrder = { ...entry.order, ...patch };
-  const statusKey = nextOrder.status || "pending";
+function updateEntry(entry: OrderEntry, patch: LiveOrderPatch): OrderEntry {
+  const order: OrderRow = { ...entry.order, ...patch };
+  const status = order.status || "pending";
 
   return {
     ...entry,
-    order: nextOrder,
-    statusLabel: STATUS_LABELS[statusKey] || statusKey,
-    statusTone: STATUS_TONES[statusKey] || "ui-chip",
-    paymentLabel: paymentLabel(nextOrder),
-    dispatchLabel: nextOrder.dispatch_status
-      ? DISPATCH_LABELS[nextOrder.dispatch_status] || nextOrder.dispatch_status
+    order,
+    statusLabel: STATUS_LABELS[status] || status,
+    statusTone: STATUS_TONES[status] || "ui-chip",
+    paymentLabel: formatPaymentLabel(order),
+    dispatchLabel: order.dispatch_status
+      ? DISPATCH_LABELS[order.dispatch_status] || order.dispatch_status
       : "No requiere despacho",
-    paymentBlocked: paymentBlocked(nextOrder),
-    operationButtons: operationButtons(nextOrder),
+    paymentBlocked: requiresPayment(order),
+    operationButtons: buildOperationButtons(order),
   };
 }
 
-export function OrdersBoardLive(props: OrdersBoardProps) {
+export function OrdersBoardLive(props: OrdersBoardLiveProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [orders, setOrders] = useState<OrderEntry[]>(props.orders);
   const ordersRef = useRef<OrderEntry[]>(props.orders);
-  const refreshTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const refreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setOrders(props.orders);
@@ -177,7 +206,7 @@ export function OrdersBoardLive(props: OrdersBoardProps) {
   }, [orders]);
 
   const scheduleFullRefresh = useCallback(() => {
-    if (refreshTimerRef.current) return;
+    if (refreshTimerRef.current !== null) return;
     refreshTimerRef.current = window.setTimeout(() => {
       refreshTimerRef.current = null;
       router.refresh();
@@ -187,24 +216,23 @@ export function OrdersBoardLive(props: OrdersBoardProps) {
   const applyLivePatch = useCallback(
     (patch: LiveOrderPatch) => {
       const exists = ordersRef.current.some((entry) => entry.order.id === patch.id);
-
       if (!exists) {
-        if (matchesView(patch, props.view, props.fulfillment)) scheduleFullRefresh();
+        if (matchesCurrentView(patch, props.view, props.fulfillment)) scheduleFullRefresh();
         return;
       }
 
       setOrders((current) =>
         current
-          .map((entry) => (entry.order.id === patch.id ? applyPatch(entry, patch) : entry))
-          .filter((entry) => matchesView(entry.order, props.view, props.fulfillment)),
+          .map((entry) => (entry.order.id === patch.id ? updateEntry(entry, patch) : entry))
+          .filter((entry) => matchesCurrentView(entry.order, props.view, props.fulfillment)),
       );
     },
     [props.fulfillment, props.view, scheduleFullRefresh],
   );
 
-  const syncKnownOrders = useCallback(async () => {
+  const syncVisibleOrders = useCallback(async () => {
     const ids = ordersRef.current.map((entry) => entry.order.id);
-    if (!ids.length) return;
+    if (ids.length === 0) return;
 
     const { data, error } = await supabase
       .from("orders")
@@ -218,7 +246,7 @@ export function OrdersBoardLive(props: OrdersBoardProps) {
       return;
     }
 
-    ((data || []) as LiveOrderPatch[]).forEach(applyLivePatch);
+    for (const row of (data || []) as LiveOrderPatch[]) applyLivePatch(row);
   }, [applyLivePatch, supabase]);
 
   useEffect(() => {
@@ -246,38 +274,25 @@ export function OrdersBoardLive(props: OrdersBoardProps) {
         },
         () => scheduleFullRefresh(),
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "orders",
-        },
-        (payload) => {
-          const deletedId = (payload.old as { id?: string }).id;
-          if (!deletedId) return;
-          setOrders((current) => current.filter((entry) => entry.order.id !== deletedId));
-        },
-      )
       .subscribe();
 
     const syncWhenVisible = () => {
-      if (document.visibilityState === "visible") void syncKnownOrders();
+      if (document.visibilityState === "visible") void syncVisibleOrders();
     };
-    const syncWhenOnline = () => void syncKnownOrders();
+    const syncWhenOnline = () => void syncVisibleOrders();
 
     window.addEventListener("focus", syncWhenOnline);
     window.addEventListener("online", syncWhenOnline);
     document.addEventListener("visibilitychange", syncWhenVisible);
 
     return () => {
-      if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
       window.removeEventListener("focus", syncWhenOnline);
       window.removeEventListener("online", syncWhenOnline);
       document.removeEventListener("visibilitychange", syncWhenVisible);
       void supabase.removeChannel(channel);
     };
-  }, [applyLivePatch, props.siteId, scheduleFullRefresh, supabase, syncKnownOrders]);
+  }, [applyLivePatch, props.siteId, scheduleFullRefresh, supabase, syncVisibleOrders]);
 
-  return <DecoratedOrdersBoard {...props} orders={orders} />;
+  return <DecoratedOrdersBoard {...(props as any)} orders={orders as any} />;
 }
