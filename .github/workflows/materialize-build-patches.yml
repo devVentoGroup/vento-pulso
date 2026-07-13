@@ -13,10 +13,38 @@ jobs:
   materialize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Apply build-time patches to
+      - name: Apply build-time patches
+        run: |
+          python3 scripts/run-order-modal-operational-improvements.py
+          python3 scripts/apply-orders-chat-inbox-mount.py
+
+      - name: Remove Python hooks from package.json
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          delete pkg.scripts.predev;
+          delete pkg.scripts.prebuild;
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+      - name: Commit materialized sources
+        run: |
+          if git diff --quiet; then
+            echo "No changes to materialize"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Materialize build patches and remove Python hooks"
+          git push origin HEAD:main
