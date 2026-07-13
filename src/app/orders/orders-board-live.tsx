@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
@@ -31,8 +38,25 @@ type OperationButton = {
   label: string;
 };
 
+type OrderStatusEvent = {
+  id: string;
+  order_id: string;
+  changed_by: string | null;
+  actor_name: string;
+  actor_type: string | null;
+  operation: string;
+  from_status: string | null;
+  to_status: string | null;
+  from_dispatch_status: string | null;
+  to_dispatch_status: string | null;
+  dispatch_partner: string | null;
+  dispatch_reference: string | null;
+  created_at: string;
+};
+
 type OrderEntry = {
   order: OrderRow;
+  events: OrderStatusEvent[];
   statusLabel: string;
   statusTone: string;
   paymentLabel: string;
@@ -50,6 +74,21 @@ type LiveOrderPatch = {
   dispatch_status: string | null;
   dispatch_partner: string | null;
   dispatch_reference: string | null;
+};
+
+type RawStatusEvent = {
+  id: string;
+  order_id: string;
+  changed_by: string | null;
+  actor_type: string | null;
+  operation: string | null;
+  from_status: string | null;
+  to_status: string | null;
+  from_dispatch_status: string | null;
+  to_dispatch_status: string | null;
+  dispatch_partner: string | null;
+  dispatch_reference: string | null;
+  created_at: string;
 };
 
 type OrdersBoardLiveProps = {
@@ -171,7 +210,7 @@ function matchesCurrentView(
   return true;
 }
 
-function updateEntry(entry: OrderEntry, patch: LiveOrderPatch): OrderEntry {
+function updateEntry(entry: OrderEntry, patch: Partial<LiveOrderPatch>): OrderEntry {
   const order: OrderRow = { ...entry.order, ...patch };
   const status = order.status || "pending";
 
@@ -189,12 +228,81 @@ function updateEntry(entry: OrderEntry, patch: LiveOrderPatch): OrderEntry {
   };
 }
 
+function operationPatch(order: OrderRow, operation: OpsAction): Partial<LiveOrderPatch> {
+  if (operation === "mark_preparing") return { status: "preparing" };
+  if (operation === "mark_ready") {
+    return {
+      status: "ready_for_dispatch",
+      dispatch_status:
+        order.fulfillment_type === "delivery" ? "ready_for_dispatch" : order.dispatch_status,
+    };
+  }
+  if (operation === "mark_in_transit") {
+    return { status: "in_transit", dispatch_status: "in_transit" };
+  }
+  if (operation === "mark_delivered") {
+    return {
+      status: "delivered",
+      dispatch_status: order.fulfillment_type === "delivery" ? "delivered" : order.dispatch_status,
+    };
+  }
+  return {
+    status: "cancelled",
+    dispatch_status: order.fulfillment_type === "delivery" ? "cancelled" : order.dispatch_status,
+  };
+}
+
+function operationLabel(operation: string | null) {
+  const labels: Record<string, string> = {
+    mark_preparing: "Preparando",
+    mark_ready: "Listo para despacho",
+    mark_in_transit: "En camino",
+    mark_delivered: "Entregado",
+    mark_cancelled: "Cancelado",
+    assign_dispatch: "Domiciliario asignado",
+  };
+  return operation ? labels[operation] || operation : "Actualización";
+}
+
+function toLiveEvent(row: RawStatusEvent): OrderStatusEvent {
+  return {
+    id: row.id,
+    order_id: row.order_id,
+    changed_by: row.changed_by,
+    actor_name: row.actor_type === "system" ? "Sistema" : "Equipo",
+    actor_type: row.actor_type,
+    operation: operationLabel(row.operation),
+    from_status: row.from_status,
+    to_status: row.to_status,
+    from_dispatch_status: row.from_dispatch_status,
+    to_dispatch_status: row.to_dispatch_status,
+    dispatch_partner: row.dispatch_partner,
+    dispatch_reference: row.dispatch_reference,
+    created_at: row.created_at,
+  };
+}
+
+function updateHeaderCounter(label: string, value: number) {
+  for (const node of Array.from(document.querySelectorAll("div"))) {
+    if (node.textContent?.trim() !== label) continue;
+    const parent = node.parentElement;
+    if (!parent) continue;
+    const valueNode = Array.from(parent.children).find(
+      (child) => child !== node && child instanceof HTMLElement,
+    );
+    if (valueNode instanceof HTMLElement) valueNode.textContent = String(value);
+    return;
+  }
+}
+
 export function OrdersBoardLive(props: OrdersBoardLiveProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [orders, setOrders] = useState<OrderEntry[]>(props.orders);
+  const [operationError, setOperationError] = useState<string | null>(null);
   const ordersRef = useRef<OrderEntry[]>(props.orders);
   const refreshTimerRef = useRef<number | null>(null);
+  const operationInFlightRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setOrders(props.orders);
@@ -203,6 +311,18 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
 
   useEffect(() => {
     ordersRef.current = orders;
+
+    const activeCount = orders.filter((entry) =>
+      ACTIVE_STATUSES.has(entry.order.status || ""),
+    ).length;
+    const readyCount = orders.filter(
+      (entry) =>
+        entry.order.fulfillment_type === "delivery" &&
+        entry.order.status === "ready_for_dispatch",
+    ).length;
+
+    updateHeaderCounter("Activos", activeCount);
+    updateHeaderCounter("Listos", readyCount);
   }, [orders]);
 
   const scheduleFullRefresh = useCallback(() => {
@@ -230,6 +350,23 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
     [props.fulfillment, props.view, scheduleFullRefresh],
   );
 
+  const addLiveEvent = useCallback((row: RawStatusEvent) => {
+    const event = toLiveEvent(row);
+    setOrders((current) =>
+      current.map((entry) => {
+        if (entry.order.id !== event.order_id) return entry;
+        if (entry.events.some((candidate) => candidate.id === event.id)) return entry;
+        return {
+          ...entry,
+          events: [
+            event,
+            ...entry.events.filter((candidate) => !candidate.id.startsWith("optimistic-")),
+          ],
+        };
+      }),
+    );
+  }, []);
+
   const syncVisibleOrders = useCallback(async () => {
     const ids = ordersRef.current.map((entry) => entry.order.id);
     if (ids.length === 0) return;
@@ -248,6 +385,94 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
 
     for (const row of (data || []) as LiveOrderPatch[]) applyLivePatch(row);
   }, [applyLivePatch, supabase]);
+
+  const runOptimisticOperation = useCallback(
+    async (orderId: string, operation: OpsAction, submitter: HTMLButtonElement | null) => {
+      if (operationInFlightRef.current.has(orderId)) return;
+      const currentEntry = ordersRef.current.find((entry) => entry.order.id === orderId);
+      if (!currentEntry) return;
+
+      operationInFlightRef.current.add(orderId);
+      setOperationError(null);
+      if (submitter) submitter.disabled = true;
+
+      const snapshot = ordersRef.current;
+      const patch = operationPatch(currentEntry.order, operation);
+      const optimisticEvent: OrderStatusEvent = {
+        id: `optimistic-${orderId}-${Date.now()}`,
+        order_id: orderId,
+        changed_by: null,
+        actor_name: "Equipo · guardando",
+        actor_type: "staff",
+        operation: operationLabel(operation),
+        from_status: currentEntry.order.status,
+        to_status: typeof patch.status === "string" ? patch.status : currentEntry.order.status,
+        from_dispatch_status: currentEntry.order.dispatch_status,
+        to_dispatch_status:
+          typeof patch.dispatch_status === "string"
+            ? patch.dispatch_status
+            : currentEntry.order.dispatch_status,
+        dispatch_partner: currentEntry.order.dispatch_partner,
+        dispatch_reference: currentEntry.order.dispatch_reference,
+        created_at: new Date().toISOString(),
+      };
+
+      setOrders((current) =>
+        current
+          .map((entry) =>
+            entry.order.id === orderId
+              ? {
+                  ...updateEntry(entry, patch),
+                  events: [optimisticEvent, ...entry.events],
+                }
+              : entry,
+          )
+          .filter((entry) => matchesCurrentView(entry.order, props.view, props.fulfillment)),
+      );
+
+      const { data, error } = await supabase.rpc("update_order_operational_state", {
+        p_order_id: orderId,
+        p_site_id: props.siteId,
+        p_operation: operation,
+        p_metadata: { source: "pulso_orders_board_live" },
+      });
+
+      const ok = !error && Boolean((data as { ok?: boolean } | null)?.ok);
+      if (!ok) {
+        setOrders(snapshot);
+        setOperationError(error?.message || "No pudimos actualizar el pedido.");
+      }
+
+      operationInFlightRef.current.delete(orderId);
+      if (submitter) submitter.disabled = false;
+    },
+    [props.fulfillment, props.siteId, props.view, supabase],
+  );
+
+  const handleSubmitCapture = useCallback(
+    (event: FormEvent<HTMLDivElement>) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+
+      const nativeEvent = event.nativeEvent as SubmitEvent;
+      const submitter = nativeEvent.submitter;
+      if (!(submitter instanceof HTMLButtonElement) || submitter.name !== "op") return;
+
+      const operation = submitter.value as OpsAction;
+      const formData = new FormData(form);
+      const orderId = String(formData.get("order_id") || "");
+      if (!orderId || !buildOperationButtons({
+        ...(ordersRef.current.find((entry) => entry.order.id === orderId)?.order || {}),
+      } as OrderRow).some((button) => button.op === operation)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      void runOptimisticOperation(orderId, operation, submitter);
+    },
+    [runOptimisticOperation],
+  );
 
   useEffect(() => {
     if (!props.siteId) return;
@@ -274,6 +499,15 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
         },
         () => scheduleFullRefresh(),
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "order_status_events",
+        },
+        (payload) => addLiveEvent(payload.new as RawStatusEvent),
+      )
       .subscribe();
 
     const syncWhenVisible = () => {
@@ -292,7 +526,30 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
       document.removeEventListener("visibilitychange", syncWhenVisible);
       void supabase.removeChannel(channel);
     };
-  }, [applyLivePatch, props.siteId, scheduleFullRefresh, supabase, syncVisibleOrders]);
+  }, [
+    addLiveEvent,
+    applyLivePatch,
+    props.siteId,
+    scheduleFullRefresh,
+    supabase,
+    syncVisibleOrders,
+  ]);
 
-  return <DecoratedOrdersBoard {...(props as any)} orders={orders as any} />;
+  return (
+    <div onSubmitCapture={handleSubmitCapture}>
+      {operationError ? (
+        <div className="ui-alert ui-alert--error mb-3">
+          {operationError}
+          <button
+            type="button"
+            onClick={() => setOperationError(null)}
+            className="ml-2 font-black underline"
+          >
+            Cerrar
+          </button>
+        </div>
+      ) : null}
+      <DecoratedOrdersBoard {...(props as any)} orders={orders as any} />
+    </div>
+  );
 }
