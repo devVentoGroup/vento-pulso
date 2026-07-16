@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   Loader2,
   MessageCircle,
@@ -21,6 +23,8 @@ type ConversationRow = {
   client_id: string;
   status: string;
   last_message_at: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
 };
 
 type MessageRow = {
@@ -55,6 +59,11 @@ type InboxItem = {
 };
 
 type LiveState = "connecting" | "live" | "offline";
+type InboxView = "active" | "archived";
+
+type ArchiveFinishedResult = {
+  archived_count?: number | string | null;
+};
 
 function formatDate(value: string | null) {
   if (!value) return "Sin mensajes";
@@ -104,6 +113,30 @@ function conversationStatusLabel(value: string | null | undefined) {
   return value ? labels[value] || value : "Sin estado";
 }
 
+function isFinishedOrder(value: string | null | undefined) {
+  return value === "delivered" || value === "cancelled";
+}
+
+function archiveErrorMessage(message: string) {
+  if (message.includes("order_not_finished")) {
+    return "Solo se pueden archivar conversaciones de pedidos entregados o cancelados.";
+  }
+
+  if (message.includes("conversation_has_unread_messages")) {
+    return "Primero debes revisar los mensajes pendientes del cliente.";
+  }
+
+  if (message.includes("conversation_not_found")) {
+    return "La conversación ya no está disponible.";
+  }
+
+  if (message.includes("forbidden")) {
+    return "No tienes permiso para administrar este chat.";
+  }
+
+  return message;
+}
+
 function readGuestName(guestInfo: Record<string, unknown> | null) {
   if (!guestInfo) return null;
 
@@ -143,6 +176,7 @@ function upsertMessage(messages: MessageRow[], next: MessageRow) {
 export function OrdersChatInbox({ siteId }: { siteId: string }) {
   const supabase = useMemo(() => createClient(), []);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [inboxView, setInboxView] = useState<InboxView>("active");
   const [items, setItems] = useState<InboxItem[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<ConversationRow | null>(null);
@@ -152,16 +186,39 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
   const [loadingInbox, setLoadingInbox] = useState(true);
   const [loadingChat, setLoadingChat] = useState(false);
   const [sending, setSending] = useState(false);
+  const [archivingConversationId, setArchivingConversationId] = useState<string | null>(null);
+  const [bulkArchiving, setBulkArchiving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [liveState, setLiveState] = useState<LiveState>("connecting");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
   const selectedOrderIdRef = useRef<string | null>(null);
   const panelOpenRef = useRef(false);
 
-  const totalUnread = useMemo(
-    () => items.reduce((sum, item) => sum + item.unreadCount, 0),
+  const activeItems = useMemo(
+    () => items.filter((item) => !item.conversation.archived_at),
     [items],
+  );
+
+  const archivedItems = useMemo(
+    () => items.filter((item) => Boolean(item.conversation.archived_at)),
+    [items],
+  );
+
+  const visibleItems = inboxView === "active" ? activeItems : archivedItems;
+
+  const totalUnread = useMemo(
+    () => activeItems.reduce((sum, item) => sum + item.unreadCount, 0),
+    [activeItems],
+  );
+
+  const archivableCount = useMemo(
+    () =>
+      activeItems.filter(
+        (item) => isFinishedOrder(item.order?.status) && item.unreadCount === 0,
+      ).length,
+    [activeItems],
   );
 
   const selectedItem = useMemo(
@@ -204,18 +261,31 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
   const loadInbox = useCallback(async () => {
     if (!siteId) return;
 
-    const [conversationsResult, unreadResult] = await Promise.all([
+    const [activeResult, archivedResult, unreadResult] = await Promise.all([
       supabase
         .from("order_conversations")
-        .select("id,order_id,site_id,client_id,status,last_message_at")
+        .select(
+          "id,order_id,site_id,client_id,status,last_message_at,archived_at,archived_by",
+        )
         .eq("site_id", siteId)
+        .is("archived_at", null)
         .order("last_message_at", { ascending: false, nullsFirst: false })
-        .limit(40),
+        .limit(100),
+      supabase
+        .from("order_conversations")
+        .select(
+          "id,order_id,site_id,client_id,status,last_message_at,archived_at,archived_by",
+        )
+        .eq("site_id", siteId)
+        .not("archived_at", "is", null)
+        .order("archived_at", { ascending: false, nullsFirst: false })
+        .limit(100),
       supabase.rpc("get_staff_order_chat_unread_counts", { p_site_id: siteId }),
     ]);
 
-    if (conversationsResult.error) {
-      setError(conversationsResult.error.message);
+    const conversationsError = activeResult.error || archivedResult.error;
+    if (conversationsError) {
+      setError(conversationsError.message);
       setLoadingInbox(false);
       return;
     }
@@ -224,8 +294,11 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
       console.warn("No se pudieron cargar mensajes pendientes:", unreadResult.error.message);
     }
 
-    const conversations = (conversationsResult.data || []) as ConversationRow[];
+    const activeConversations = (activeResult.data || []) as ConversationRow[];
+    const archivedConversations = (archivedResult.data || []) as ConversationRow[];
+    const conversations = [...activeConversations, ...archivedConversations];
     const unreadMap = new Map<string, number>();
+
     ((unreadResult.data || []) as UnreadRow[]).forEach((row) => {
       unreadMap.set(row.order_id, Number(row.unread_count || 0));
     });
@@ -255,11 +328,23 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
         unreadCount: unreadMap.get(conversation.order_id) || 0,
       }))
       .sort((a, b) => {
-        if (a.unreadCount !== b.unreadCount) return b.unreadCount - a.unreadCount;
-        return (
-          new Date(b.conversation.last_message_at || 0).getTime() -
-          new Date(a.conversation.last_message_at || 0).getTime()
-        );
+        const aArchived = Boolean(a.conversation.archived_at);
+        const bArchived = Boolean(b.conversation.archived_at);
+
+        if (aArchived !== bArchived) return aArchived ? 1 : -1;
+
+        if (!aArchived && a.unreadCount !== b.unreadCount) {
+          return b.unreadCount - a.unreadCount;
+        }
+
+        const aDate = aArchived
+          ? a.conversation.archived_at
+          : a.conversation.last_message_at;
+        const bDate = bArchived
+          ? b.conversation.archived_at
+          : b.conversation.last_message_at;
+
+        return new Date(bDate || 0).getTime() - new Date(aDate || 0).getTime();
       });
 
     setItems(nextItems);
@@ -271,6 +356,7 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
       const current = nextItems.find(
         (item) => item.conversation.order_id === currentOrderId,
       );
+
       if (current) {
         setSelectedConversation(current.conversation);
         setSelectedOrder(current.order);
@@ -305,25 +391,109 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
     [markRead, supabase],
   );
 
+  const closeConversation = useCallback(() => {
+    setSelectedOrderId(null);
+    setSelectedConversation(null);
+    setSelectedOrder(null);
+    setMessages([]);
+    setBody("");
+    setError(null);
+  }, []);
+
   const openConversation = useCallback(
     async (item: InboxItem) => {
       setPanelOpen(true);
+      setInboxView(item.conversation.archived_at ? "archived" : "active");
       setSelectedOrderId(item.conversation.order_id);
       setSelectedConversation(item.conversation);
       setSelectedOrder(item.order);
       setMessages([]);
       setBody("");
+      setFeedback(null);
+      setError(null);
       setLoadingChat(true);
       await loadMessages(item.conversation.id, true);
     },
     [loadMessages],
   );
 
+  const setConversationArchived = useCallback(
+    async (item: InboxItem, archived: boolean) => {
+      if (archivingConversationId) return;
+
+      if (archived && item.unreadCount > 0) {
+        setError("Primero debes revisar los mensajes pendientes del cliente.");
+        return;
+      }
+
+      setArchivingConversationId(item.conversation.id);
+      setError(null);
+      setFeedback(null);
+
+      const { error: archiveError } = await supabase.rpc(
+        "set_order_conversation_archived",
+        {
+          p_conversation_id: item.conversation.id,
+          p_archived: archived,
+        },
+      );
+
+      if (archiveError) {
+        setError(archiveErrorMessage(archiveError.message));
+        setArchivingConversationId(null);
+        return;
+      }
+
+      if (selectedConversationIdRef.current === item.conversation.id) {
+        closeConversation();
+      }
+
+      setFeedback(
+        archived
+          ? `El chat #${orderCode(item.conversation.order_id)} fue archivado.`
+          : `El chat #${orderCode(item.conversation.order_id)} volvió a Activos.`,
+      );
+      await loadInbox();
+      setArchivingConversationId(null);
+    },
+    [archivingConversationId, closeConversation, loadInbox, supabase],
+  );
+
+  const archiveFinishedConversations = useCallback(async () => {
+    if (bulkArchiving || archivableCount === 0) return;
+
+    setBulkArchiving(true);
+    setError(null);
+    setFeedback(null);
+
+    const { data, error: archiveError } = await supabase.rpc(
+      "archive_finished_order_conversations",
+      { p_site_id: siteId },
+    );
+
+    if (archiveError) {
+      setError(archiveErrorMessage(archiveError.message));
+      setBulkArchiving(false);
+      return;
+    }
+
+    const result = (data || {}) as ArchiveFinishedResult;
+    const archivedCount = Number(result.archived_count || 0);
+
+    setFeedback(
+      archivedCount === 1
+        ? "Se archivó 1 conversación finalizada."
+        : `Se archivaron ${archivedCount} conversaciones finalizadas.`,
+    );
+    await loadInbox();
+    setBulkArchiving(false);
+  }, [archivableCount, bulkArchiving, loadInbox, siteId, supabase]);
 
   useEffect(() => {
     const handleOpenOrderChat = (event: Event) => {
       const orderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId;
       setPanelOpen(true);
+
       if (!orderId) {
         void loadInbox();
         return;
@@ -341,15 +511,6 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
     window.addEventListener("vento-pulso:open-order-chat", handleOpenOrderChat);
     return () => window.removeEventListener("vento-pulso:open-order-chat", handleOpenOrderChat);
   }, [items, loadInbox, openConversation]);
-
-  const closeConversation = () => {
-    setSelectedOrderId(null);
-    setSelectedConversation(null);
-    setSelectedOrder(null);
-    setMessages([]);
-    setBody("");
-    setError(null);
-  };
 
   const sendMessage = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -504,8 +665,14 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
     node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
 
-  const selectedClosed =
-    selectedOrder?.status === "delivered" || selectedOrder?.status === "cancelled";
+  const selectedArchived = Boolean(selectedConversation?.archived_at);
+  const selectedOrderFinished = isFinishedOrder(selectedOrder?.status);
+  const selectedBlocked = selectedArchived || selectedOrderFinished;
+  const selectedCanArchive =
+    Boolean(selectedItem) &&
+    !selectedArchived &&
+    selectedOrderFinished &&
+    (selectedItem?.unreadCount || 0) === 0;
   const LiveIcon = liveState === "live" ? Wifi : WifiOff;
 
   return (
@@ -592,96 +759,255 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
             </header>
 
             {!selectedConversation ? (
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                {totalUnread > 0 ? (
-                  <div className="mb-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3">
-                    <div className="text-sm font-black text-cyan-950">
-                      {totalUnread} mensaje{totalUnread === 1 ? "" : "s"} pendiente{totalUnread === 1 ? "" : "s"}
-                    </div>
-                    <div className="mt-0.5 text-xs font-semibold text-cyan-700">
-                      Los chats sin responder aparecen primero.
-                    </div>
+              <>
+                <div className="shrink-0 border-b border-slate-200 bg-white p-3">
+                  <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInboxView("active");
+                        setError(null);
+                        setFeedback(null);
+                      }}
+                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${
+                        inboxView === "active"
+                          ? "bg-white text-slate-950 shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Activos
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-700">
+                        {activeItems.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInboxView("archived");
+                        setError(null);
+                        setFeedback(null);
+                      }}
+                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${
+                        inboxView === "archived"
+                          ? "bg-white text-slate-950 shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Archivados
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-700">
+                        {archivedItems.length}
+                      </span>
+                    </button>
                   </div>
-                ) : null}
 
-                {loadingInbox ? (
-                  <div className="flex min-h-52 items-center justify-center gap-2 text-sm font-semibold text-slate-500">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Cargando chats
-                  </div>
-                ) : items.length === 0 ? (
-                  <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 text-center">
-                    <MessageCircle className="h-8 w-8 text-slate-300" />
-                    <div className="mt-3 text-sm font-black text-slate-800">Sin conversaciones</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      Los chats aparecerán aquí cuando un cliente abra una conversación.
+                  {inboxView === "active" && archivableCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => void archiveFinishedConversations()}
+                      disabled={bulkArchiving}
+                      className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {bulkArchiving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                      Archivar finalizados ({archivableCount})
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  {inboxView === "active" && totalUnread > 0 ? (
+                    <div className="mb-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+                      <div className="text-sm font-black text-cyan-950">
+                        {totalUnread} mensaje{totalUnread === 1 ? "" : "s"} pendiente
+                        {totalUnread === 1 ? "" : "s"}
+                      </div>
+                      <div className="mt-0.5 text-xs font-semibold text-cyan-700">
+                        Los chats sin responder aparecen primero.
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {items.map((item) => {
-                      const guestName = readGuestName(item.order?.guest_info ?? null);
-                      return (
-                        <button
-                          key={item.conversation.id}
-                          type="button"
-                          onClick={() => void openConversation(item)}
-                          className={`w-full rounded-2xl border bg-white px-4 py-3 text-left shadow-sm transition hover:border-cyan-300 hover:shadow-md ${
-                            item.unreadCount > 0
-                              ? "border-cyan-400 ring-2 ring-cyan-100"
-                              : "border-slate-200"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="font-black text-slate-950">
-                                  #{orderCode(item.conversation.order_id)}
+                  ) : null}
+
+                  {feedback ? (
+                    <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
+                      {feedback}
+                    </div>
+                  ) : null}
+
+                  {error ? (
+                    <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-800">
+                      {error}
+                    </div>
+                  ) : null}
+
+                  {loadingInbox ? (
+                    <div className="flex min-h-52 items-center justify-center gap-2 text-sm font-semibold text-slate-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cargando chats
+                    </div>
+                  ) : visibleItems.length === 0 ? (
+                    <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 text-center">
+                      {inboxView === "archived" ? (
+                        <Archive className="h-8 w-8 text-slate-300" />
+                      ) : (
+                        <MessageCircle className="h-8 w-8 text-slate-300" />
+                      )}
+                      <div className="mt-3 text-sm font-black text-slate-800">
+                        {inboxView === "archived"
+                          ? "Sin conversaciones archivadas"
+                          : "Sin conversaciones activas"}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {inboxView === "archived"
+                          ? "Los chats archivados aparecerán aquí y podrán restaurarse."
+                          : "Los chats aparecerán aquí cuando un cliente abra una conversación."}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {visibleItems.map((item) => {
+                        const guestName = readGuestName(item.order?.guest_info ?? null);
+                        const archived = Boolean(item.conversation.archived_at);
+                        const canArchive =
+                          !archived &&
+                          isFinishedOrder(item.order?.status) &&
+                          item.unreadCount === 0;
+                        const actionLoading =
+                          archivingConversationId === item.conversation.id;
+
+                        return (
+                          <div
+                            key={item.conversation.id}
+                            className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:border-cyan-300 hover:shadow-md ${
+                              item.unreadCount > 0
+                                ? "border-cyan-400 ring-2 ring-cyan-100"
+                                : "border-slate-200"
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => void openConversation(item)}
+                              className="w-full px-4 py-3 text-left"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <div className="font-black text-slate-950">
+                                      #{orderCode(item.conversation.order_id)}
+                                    </div>
+                                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-black text-slate-600">
+                                      {statusLabel(item.order?.status)}
+                                    </span>
+                                    {archived ? (
+                                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700">
+                                        Archivado
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="mt-1 truncate text-sm font-semibold text-slate-700">
+                                    {guestName || item.order?.contact_phone || "Cliente"}
+                                  </div>
+                                  <div className="mt-1 text-xs text-slate-500">
+                                    {archived
+                                      ? `Archivado · ${formatDate(item.conversation.archived_at)}`
+                                      : `${conversationStatusLabel(item.conversation.status)} · ${formatDate(item.conversation.last_message_at)}`}
+                                  </div>
                                 </div>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-black text-slate-600">
-                                  {statusLabel(item.order?.status)}
-                                </span>
-                              </div>
-                              <div className="mt-1 truncate text-sm font-semibold text-slate-700">
-                                {guestName || item.order?.contact_phone || "Cliente"}
-                              </div>
-                              <div className="mt-1 text-xs text-slate-500">
-                                {conversationStatusLabel(item.conversation.status)} · {formatDate(item.conversation.last_message_at)}
-                              </div>
-                            </div>
 
-                            {item.unreadCount > 0 ? (
-                              <span className="inline-flex min-w-7 shrink-0 items-center justify-center rounded-full bg-red-600 px-2 py-1 text-xs font-black text-white">
-                                {item.unreadCount > 99 ? "99+" : item.unreadCount}
-                              </span>
-                            ) : (
-                              <MessageCircle className="mt-1 h-5 w-5 shrink-0 text-slate-300" />
-                            )}
+                                {item.unreadCount > 0 ? (
+                                  <span className="inline-flex min-w-7 shrink-0 items-center justify-center rounded-full bg-red-600 px-2 py-1 text-xs font-black text-white">
+                                    {item.unreadCount > 99 ? "99+" : item.unreadCount}
+                                  </span>
+                                ) : (
+                                  <MessageCircle className="mt-1 h-5 w-5 shrink-0 text-slate-300" />
+                                )}
+                              </div>
+                            </button>
+
+                            {archived || canArchive ? (
+                              <div className="flex items-center justify-end border-t border-slate-100 bg-slate-50 px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void setConversationArchived(item, !archived)
+                                  }
+                                  disabled={actionLoading}
+                                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {actionLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : archived ? (
+                                    <ArchiveRestore className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <Archive className="h-3.5 w-3.5" />
+                                  )}
+                                  {archived ? "Restaurar" : "Archivar"}
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             ) : (
               <>
                 <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-black text-slate-950">
-                        {readGuestName(selectedOrder?.guest_info ?? null) || selectedOrder?.contact_phone || "Cliente"}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-black text-slate-950">
+                        {readGuestName(selectedOrder?.guest_info ?? null) ||
+                          selectedOrder?.contact_phone ||
+                          "Cliente"}
                       </div>
                       <div className="mt-0.5 text-xs font-semibold text-slate-500">
                         {statusLabel(selectedOrder?.status)} · {conversationStatusLabel(selectedConversation.status)}
                       </div>
+                      {selectedArchived ? (
+                        <div className="mt-1 text-xs font-semibold text-amber-700">
+                          Archivado · {formatDate(selectedConversation.archived_at)}
+                        </div>
+                      ) : null}
                     </div>
                     {selectedItem?.unreadCount ? (
                       <span className="rounded-full bg-red-600 px-2.5 py-1 text-xs font-black text-white">
-                        {selectedItem.unreadCount} pendiente{selectedItem.unreadCount === 1 ? "" : "s"}
+                        {selectedItem.unreadCount} pendiente
+                        {selectedItem.unreadCount === 1 ? "" : "s"}
                       </span>
                     ) : null}
                   </div>
+
+                  {selectedItem && (selectedArchived || selectedCanArchive) ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void setConversationArchived(selectedItem, !selectedArchived)
+                      }
+                      disabled={archivingConversationId === selectedConversation.id}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {archivingConversationId === selectedConversation.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : selectedArchived ? (
+                        <ArchiveRestore className="h-4 w-4" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                      {selectedArchived ? "Restaurar conversación" : "Archivar conversación"}
+                    </button>
+                  ) : null}
+
+                  {!selectedArchived &&
+                  selectedOrderFinished &&
+                  (selectedItem?.unreadCount || 0) > 0 ? (
+                    <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                      Revisa los mensajes pendientes antes de archivar esta conversación.
+                    </div>
+                  ) : null}
                 </div>
 
                 <div
@@ -710,7 +1036,13 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
-                            <span>{mine ? "Pulso" : message.author_type === "client" ? "Cliente" : "Sistema"}</span>
+                            <span>
+                              {mine
+                                ? "Pulso"
+                                : message.author_type === "client"
+                                  ? "Cliente"
+                                  : "Sistema"}
+                            </span>
                             <span>{formatDate(message.created_at)}</span>
                           </div>
                           <div className="mt-1 whitespace-pre-wrap text-sm text-slate-900">
@@ -722,6 +1054,12 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                   )}
                 </div>
 
+                {feedback ? (
+                  <div className="shrink-0 border-t border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800">
+                    {feedback}
+                  </div>
+                ) : null}
+
                 {error ? (
                   <div className="shrink-0 border-t border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-800">
                     {error}
@@ -729,9 +1067,11 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                 ) : null}
 
                 <form onSubmit={sendMessage} className="shrink-0 border-t border-slate-200 bg-white p-3">
-                  {selectedClosed ? (
+                  {selectedBlocked ? (
                     <div className="rounded-xl bg-slate-100 px-3 py-3 text-center text-xs font-semibold text-slate-500">
-                      El chat está cerrado porque el pedido finalizó.
+                      {selectedArchived
+                        ? "La conversación está archivada y el pedido ya finalizó."
+                        : "El chat está cerrado porque el pedido finalizó."}
                     </div>
                   ) : (
                     <div className="flex items-end gap-2">
@@ -755,7 +1095,11 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                         className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label="Enviar mensaje"
                       >
-                        {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                        {sending ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Send className="h-5 w-5" />
+                        )}
                       </button>
                     </div>
                   )}
