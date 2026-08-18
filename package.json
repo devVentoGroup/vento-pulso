@@ -5,8 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:ci010": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit --incremental false",
+    "test": "npm run test:ci010",
+    "test:ci010": "node --test scripts/quality/pulso-consumer-baseline-gate.test.mjs",
+    "ci010:baseline": "node scripts/quality/pulso-consumer-baseline-gate.mjs --packages=@vento/contracts,@vento/os-context,@vento/supabase,@vento/ui-web --json",
     "audit:i18n": "node scripts/audit-i18n.mjs"
   },
   "dependencies": {
