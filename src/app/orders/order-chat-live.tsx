@@ -128,22 +128,23 @@ export function OrderChatLive({
   const supabase = useMemo(() => createClient(), []);
 
   const closed = orderStatus === "delivered" || orderStatus === "cancelled";
+  const conversationId = conversation?.id ?? null;
 
   const markRead = useCallback(async () => {
-    if (!conversation?.id) return;
+    if (!conversationId) return;
     const { error: readError } = await supabase.rpc("mark_order_conversation_read", {
-      p_conversation_id: conversation.id,
+      p_conversation_id: conversationId,
     });
     if (readError) console.warn("No se pudo marcar el chat como leído:", readError.message);
-  }, [conversation?.id, supabase]);
+  }, [conversationId, supabase]);
 
   const loadCurrentMessages = useCallback(async () => {
-    if (!conversation?.id) return;
+    if (!conversationId) return;
 
     const { data, error: loadError } = await supabase
       .from("order_messages")
       .select("id,conversation_id,order_id,site_id,author_id,author_type,body,created_at")
-      .eq("conversation_id", conversation.id)
+      .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
       .limit(200);
 
@@ -154,33 +155,43 @@ export function OrderChatLive({
 
     setMessages(sortMessages((data || []) as OrderMessageRow[]));
     await markRead();
-  }, [conversation?.id, markRead, supabase]);
+  }, [conversationId, markRead, supabase]);
 
   const latestMessage = messages[messages.length - 1] || null;
   const latestMessageAt = latestMessage?.created_at || conversation?.last_message_at || null;
 
   useEffect(() => {
-    setMessages(sortMessages(initialMessages));
-  }, [conversation?.id, initialMessages]);
+    const resetTimer = window.setTimeout(() => {
+      setMessages(sortMessages(initialMessages));
+    }, 0);
+
+    return () => window.clearTimeout(resetTimer);
+  }, [conversationId, initialMessages]);
 
   useEffect(() => {
-    void loadCurrentMessages();
+    const loadTimer = window.setTimeout(() => {
+      void loadCurrentMessages();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, [loadCurrentMessages]);
 
   useEffect(() => {
-    if (!conversation?.id) return;
+    if (!conversationId) return;
 
-    setRealtimeState("connecting");
+    const connectingTimer = window.setTimeout(() => {
+      setRealtimeState("connecting");
+    }, 0);
 
     const channel = supabase
-      .channel(`order-chat:${conversation.id}`)
+      .channel(`order-chat:${conversationId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "order_messages",
-          filter: `conversation_id=eq.${conversation.id}`,
+          filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
           const next = payload.new as OrderMessageRow;
@@ -196,9 +207,10 @@ export function OrderChatLive({
       });
 
     return () => {
+      window.clearTimeout(connectingTimer);
       void supabase.removeChannel(channel);
     };
-  }, [conversation?.id, markRead, supabase]);
+  }, [conversationId, markRead, supabase]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -293,11 +305,10 @@ export function OrderChatLive({
             </div>
           ) : null}
           <div
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black ${
-              live
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black ${live
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "border-amber-200 bg-amber-50 text-amber-700"
-            }`}
+              }`}
           >
             {live ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
             {live ? "En vivo" : realtimeState === "connecting" ? "Conectando" : "Reconectando"}
@@ -320,11 +331,10 @@ export function OrderChatLive({
             return (
               <div
                 key={message.id}
-                className={`rounded-xl border px-3 py-2 ${
-                  mine
+                className={`rounded-xl border px-3 py-2 ${mine
                     ? "ml-8 border-cyan-200 bg-cyan-50"
                     : "mr-8 border-slate-200 bg-white"
-                } ${message.failed ? "border-red-200 bg-red-50" : ""}`}
+                  } ${message.failed ? "border-red-200 bg-red-50" : ""}`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs font-bold text-slate-500">

@@ -363,9 +363,8 @@ function OrderCard({
     <button
       type="button"
       onClick={onOpen}
-      className={`group relative min-h-[220px] overflow-hidden rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-        unreadCount > 0 ? "border-cyan-400 ring-2 ring-cyan-100" : "border-slate-200 hover:border-cyan-300"
-      }`}
+      className={`group relative min-h-[220px] overflow-hidden rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-400 ${unreadCount > 0 ? "border-cyan-400 ring-2 ring-cyan-100" : "border-slate-200 hover:border-cyan-300"
+        }`}
     >
       <div className={`absolute inset-x-0 top-0 h-1.5 ${accent}`} />
 
@@ -532,7 +531,11 @@ export function OrdersBoard({
   );
 
   useEffect(() => {
-    void loadUnreadCounts();
+    const loadTimer = window.setTimeout(() => {
+      void loadUnreadCounts();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, [loadUnreadCounts]);
 
   useEffect(() => {
@@ -670,11 +673,10 @@ export function OrdersBoard({
                       }),
                     );
                   }}
-                  className={`absolute bottom-3 right-3 z-10 inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-black shadow-lg transition ${
-                    unreadCount > 0
+                  className={`absolute bottom-3 right-3 z-10 inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-black shadow-lg transition ${unreadCount > 0
                       ? "bg-red-600 text-white hover:bg-red-700"
                       : "border border-slate-200 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"
-                  }`}
+                    }`}
                   aria-label={`Abrir chat del pedido ${entry.orderCode}`}
                 >
                   <MessageCircle className="h-4 w-4" />
@@ -753,9 +755,8 @@ export function OrdersBoard({
                       key={tab.id}
                       type="button"
                       onClick={() => selectTab(tab.id)}
-                      className={`relative inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-black transition ${
-                        active ? "bg-cyan-500 text-white" : "text-slate-600 hover:bg-slate-100"
-                      }`}
+                      className={`relative inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-black transition ${active ? "bg-cyan-500 text-white" : "text-slate-600 hover:bg-slate-100"
+                        }`}
                     >
                       <Icon className="h-4 w-4" />
                       {tab.label}

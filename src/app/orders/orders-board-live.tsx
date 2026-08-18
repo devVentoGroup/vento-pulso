@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type FormEvent,
   type MouseEvent,
 } from "react";
@@ -14,8 +15,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { OrdersBoard as DecoratedOrdersBoard } from "./orders-board";
 
-type ViewFilter = "active" | "delivered" | "cancelled" | "all";
-type FulfillmentFilter = "all" | "delivery" | "pickup" | "on_premise";
+type DecoratedOrdersBoardProps = ComponentProps<typeof DecoratedOrdersBoard>;
+type OrdersBoardLiveProps = DecoratedOrdersBoardProps;
+type OrderEntry = OrdersBoardLiveProps["orders"][number];
+type OrderRow = OrderEntry["order"];
+type ViewFilter = OrdersBoardLiveProps["view"];
+type FulfillmentFilter = OrdersBoardLiveProps["fulfillment"];
+
 type OpsAction =
   | "mark_preparing"
   | "mark_ready"
@@ -26,18 +32,6 @@ type GiftOperation =
   | "mark_card_prepared"
   | "mark_card_included"
   | "mark_price_free_packaging_confirmed";
-
-type OrderRow = {
-  id: string;
-  status: string | null;
-  payment_status: string | null;
-  fulfillment_type: string | null;
-  dispatch_status: string | null;
-  dispatch_partner: string | null;
-  dispatch_reference: string | null;
-  guest_info?: Record<string, unknown> | null;
-  [key: string]: unknown;
-};
 
 type OperationButton = {
   op: OpsAction;
@@ -58,18 +52,6 @@ type OrderStatusEvent = {
   dispatch_partner: string | null;
   dispatch_reference: string | null;
   created_at: string;
-};
-
-type OrderEntry = {
-  order: OrderRow;
-  events: OrderStatusEvent[];
-  statusLabel: string;
-  statusTone: string;
-  paymentLabel: string;
-  dispatchLabel: string;
-  paymentBlocked: boolean;
-  operationButtons: OperationButton[];
-  [key: string]: unknown;
 };
 
 type LiveOrderPatch = {
@@ -95,16 +77,6 @@ type RawStatusEvent = {
   dispatch_partner: string | null;
   dispatch_reference: string | null;
   created_at: string;
-};
-
-type OrdersBoardLiveProps = {
-  orders: OrderEntry[];
-  siteId: string;
-  view: ViewFilter;
-  fulfillment: FulfillmentFilter;
-  updateOperationalOrderAction: (...args: any[]) => any;
-  assignDispatchOrderAction: (...args: any[]) => any;
-  sendOrderMessageLiveAction: (...args: any[]) => any;
 };
 
 const ACTIVE_STATUSES = new Set([
@@ -357,8 +329,13 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
   const operationInFlightRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    setOrders(props.orders);
     ordersRef.current = props.orders;
+
+    const syncTimer = window.setTimeout(() => {
+      setOrders(props.orders);
+    }, 0);
+
+    return () => window.clearTimeout(syncTimer);
   }, [props.orders]);
 
   useEffect(() => {
@@ -474,9 +451,9 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
           .map((entry) =>
             entry.order.id === orderId
               ? {
-                  ...updateEntry(entry, patch),
-                  events: [optimisticEvent, ...entry.events],
-                }
+                ...updateEntry(entry, patch),
+                events: [optimisticEvent, ...entry.events],
+              }
               : entry,
           )
           .filter((entry) => matchesCurrentView(entry.order, props.view, props.fulfillment)),
@@ -526,10 +503,10 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
         current.map((entry) =>
           entry.order.id === orderId
             ? updateEntry(entry, {
-                dispatch_status: "assigned",
-                dispatch_partner: dispatchPartner || null,
-                dispatch_reference: dispatchReference || null,
-              })
+              dispatch_status: "assigned",
+              dispatch_partner: dispatchPartner || null,
+              dispatch_reference: dispatchReference || null,
+            })
             : entry,
         ),
       );
@@ -730,7 +707,7 @@ export function OrdersBoardLive(props: OrdersBoardLiveProps) {
           </button>
         </div>
       ) : null}
-      <DecoratedOrdersBoard {...(props as any)} orders={orders as any} />
+      <DecoratedOrdersBoard {...props} orders={orders} />
     </div>
   );
 }

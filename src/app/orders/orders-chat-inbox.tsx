@@ -564,13 +564,19 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
   };
 
   useEffect(() => {
-    void loadInbox();
+    const loadTimer = window.setTimeout(() => {
+      void loadInbox();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, [loadInbox]);
 
   useEffect(() => {
     if (!siteId) return;
 
-    setLiveState("connecting");
+    const connectingTimer = window.setTimeout(() => {
+      setLiveState("connecting");
+    }, 0);
 
     const channel = supabase
       .channel(`pulso-chat-inbox:${siteId}`)
@@ -630,6 +636,7 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
       });
 
     return () => {
+      window.clearTimeout(connectingTimer);
       void supabase.removeChannel(channel);
     };
   }, [loadInbox, markRead, siteId, supabase]);
@@ -769,11 +776,10 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                         setError(null);
                         setFeedback(null);
                       }}
-                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${
-                        inboxView === "active"
+                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${inboxView === "active"
                           ? "bg-white text-slate-950 shadow-sm"
                           : "text-slate-500 hover:text-slate-800"
-                      }`}
+                        }`}
                     >
                       Activos
                       <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-700">
@@ -787,11 +793,10 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                         setError(null);
                         setFeedback(null);
                       }}
-                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${
-                        inboxView === "archived"
+                      className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${inboxView === "archived"
                           ? "bg-white text-slate-950 shadow-sm"
                           : "text-slate-500 hover:text-slate-800"
-                      }`}
+                        }`}
                     >
                       Archivados
                       <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-700">
@@ -880,11 +885,10 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                         return (
                           <div
                             key={item.conversation.id}
-                            className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:border-cyan-300 hover:shadow-md ${
-                              item.unreadCount > 0
+                            className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:border-cyan-300 hover:shadow-md ${item.unreadCount > 0
                                 ? "border-cyan-400 ring-2 ring-cyan-100"
                                 : "border-slate-200"
-                            }`}
+                              }`}
                           >
                             <button
                               type="button"
@@ -1002,8 +1006,8 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                   ) : null}
 
                   {!selectedArchived &&
-                  selectedOrderFinished &&
-                  (selectedItem?.unreadCount || 0) > 0 ? (
+                    selectedOrderFinished &&
+                    (selectedItem?.unreadCount || 0) > 0 ? (
                     <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
                       Revisa los mensajes pendientes antes de archivar esta conversación.
                     </div>
@@ -1029,11 +1033,10 @@ export function OrdersChatInbox({ siteId }: { siteId: string }) {
                       return (
                         <div
                           key={message.id}
-                          className={`rounded-2xl border px-3 py-2.5 ${
-                            mine
+                          className={`rounded-2xl border px-3 py-2.5 ${mine
                               ? "ml-8 border-cyan-200 bg-cyan-50"
                               : "mr-8 border-slate-200 bg-white"
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-400">
                             <span>

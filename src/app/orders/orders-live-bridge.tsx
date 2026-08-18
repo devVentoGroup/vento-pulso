@@ -187,20 +187,23 @@ export function OrdersLiveBridge({ siteId }: OrdersLiveBridgeProps) {
       originalTitleRef.current = document.title;
     }
 
-    if (!canUseNotifications()) {
-      setNotificationPermission("unsupported");
-    } else {
-      setNotificationPermission(Notification.permission);
-    }
+    const permissionTimer = window.setTimeout(() => {
+      setNotificationPermission(
+        canUseNotifications() ? Notification.permission : "unsupported",
+      );
+    }, 0);
+
+    return () => window.clearTimeout(permissionTimer);
   }, []);
 
   useEffect(() => {
-    if (!siteId) {
-      setLiveStatus("error");
-      return;
-    }
+    const statusTimer = window.setTimeout(() => {
+      setLiveStatus(siteId ? "connecting" : "error");
+    }, 0);
 
-    setLiveStatus("connecting");
+    if (!siteId) {
+      return () => window.clearTimeout(statusTimer);
+    }
 
     const channel = supabase
       .channel(`pulso-orders-live-${siteId}`)
@@ -266,6 +269,8 @@ export function OrdersLiveBridge({ siteId }: OrdersLiveBridgeProps) {
       });
 
     return () => {
+      window.clearTimeout(statusTimer);
+
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current);
       }
@@ -326,22 +331,20 @@ export function OrdersLiveBridge({ siteId }: OrdersLiveBridgeProps) {
 
       <div className="flex flex-wrap items-center gap-2">
         <div
-          className={`inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-black ring-1 ${
-            liveStatus === "connected"
+          className={`inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-black ring-1 ${liveStatus === "connected"
               ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
               : "bg-amber-50 text-amber-700 ring-amber-200"
-          }`}
+            }`}
         >
           <LiveIcon className="h-3.5 w-3.5" />
           {liveCopy}
         </div>
 
         <div
-          className={`inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-black ring-1 ${
-            alertsEnabled
+          className={`inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-black ring-1 ${alertsEnabled
               ? "bg-cyan-50 text-cyan-700 ring-cyan-200"
               : "bg-slate-50 text-slate-600 ring-slate-200"
-          }`}
+            }`}
         >
           <Radio className="h-3.5 w-3.5" />
           Alertas {alertsEnabled ? "activas" : "sin activar"}

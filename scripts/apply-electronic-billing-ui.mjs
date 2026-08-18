@@ -13,8 +13,8 @@ function patchPage() {
   if (source.includes('type OrderBillingRequestRow = {')) return;
 
   source = replaceOnce(source,
-`type OrderItemRow = {`,
-`type OrderBillingRequestRow = {
+    `type OrderItemRow = {`,
+    `type OrderBillingRequestRow = {
   id: string;
   order_id: string;
   client_id: string;
@@ -40,17 +40,17 @@ function patchPage() {
 type OrderItemRow = {`, 'page billing type');
 
   source = replaceOnce(source,
-`  let orderItemsByOrder: Record<string, OrderItemView[]> = {};
+    `  let orderItemsByOrder: Record<string, OrderItemView[]> = {};
   let orderItemsError: string | null = null;`,
-`  let billingByOrder: Record<string, OrderBillingRequestRow> = {};
+    `  let billingByOrder: Record<string, OrderBillingRequestRow> = {};
   let billingError: string | null = null;
   let orderItemsByOrder: Record<string, OrderItemView[]> = {};
   let orderItemsError: string | null = null;`, 'page billing state');
 
   source = replaceOnce(source,
-`  if (orderIds.length > 0) {
+    `  if (orderIds.length > 0) {
     const { data: orderItemsData, error: itemsError } = await supabase`,
-`  if (orderIds.length > 0) {
+    `  if (orderIds.length > 0) {
     const { data: billingData, error: billingFetchError } = await supabase
       .from("order_billing_requests")
       .select(
@@ -69,18 +69,18 @@ type OrderItemRow = {`, 'page billing type');
     const { data: orderItemsData, error: itemsError } = await supabase`, 'page billing query');
 
   source = replaceOnce(source,
-`      order,
+    `      order,
       items,`,
-`      order,
+    `      order,
       billing: billingByOrder[order.id] ?? null,
       items,`, 'page board billing');
 
   source = replaceOnce(source,
-`      {orderMessagesError ? (
+    `      {orderMessagesError ? (
         <div className="ui-alert ui-alert--warn">No se pudo cargar el chat: {orderMessagesError}</div>
       ) : null}
 `,
-`      {orderMessagesError ? (
+    `      {orderMessagesError ? (
         <div className="ui-alert ui-alert--warn">No se pudo cargar el chat: {orderMessagesError}</div>
       ) : null}
       {billingError ? (
@@ -97,19 +97,19 @@ function patchBoard() {
   if (source.includes('type OrderBillingRequest = {')) return;
 
   source = replaceOnce(source,
-`  Phone,
+    `  Phone,
   Store,`,
-`  Phone,
+    `  Phone,
   ReceiptText,
   Store,`, 'board receipt icon');
 
   source = replaceOnce(source,
-`type UnreadRow = {
+    `type UnreadRow = {
   order_id: string;
   conversation_id: string;
   unread_count: number | string | null;
 };`,
-`type UnreadRow = {
+    `type UnreadRow = {
   order_id: string;
   conversation_id: string;
   unread_count: number | string | null;
@@ -139,15 +139,15 @@ type OrderBillingRequest = {
 };`, 'board billing type');
 
   source = replaceOnce(source,
-`  order: OrderRow;
+    `  order: OrderRow;
   items: OrderItemView[];`,
-`  order: OrderRow;
+    `  order: OrderRow;
   billing: OrderBillingRequest | null;
   items: OrderItemView[];`, 'board billing property');
 
   source = replaceOnce(source,
-`function ActionIcon({ op }: { op: OpsAction }) {`,
-`function billingStatusLabel(status: string) {
+    `function ActionIcon({ op }: { op: OpsAction }) {`,
+    `function billingStatusLabel(status: string) {
   const labels: Record<string, string> = {
     requested: "Solicitada",
     ready_to_issue: "Lista para emitir",
@@ -172,10 +172,10 @@ function billingStatusTone(status: string) {
 function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
 
   source = replaceOnce(source,
-`      </div>
+    `      </div>
 
       <div className="mt-4 min-h-[46px] space-y-1">`,
-`      </div>
+    `      </div>
 
       {data.billing ? (
         <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-black text-violet-700">
@@ -187,25 +187,25 @@ function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
       <div className="mt-4 min-h-[46px] space-y-1">`, 'board card billing badge');
 
   source = replaceOnce(source,
-`  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+    `  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ModalTab>("order");
   const [unreadByOrder, setUnreadByOrder] = useState<Record<string, number>>({});`,
-`  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+    `  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ModalTab>("order");
   const [billingDetailsOpen, setBillingDetailsOpen] = useState(false);
   const [unreadByOrder, setUnreadByOrder] = useState<Record<string, number>>({});`, 'board billing modal state');
 
   source = replaceOnce(source,
-`  const totalUnread = useMemo(`,
-`  const selectedBilling = selected?.billing ?? null;
+    `  const totalUnread = useMemo(`,
+    `  const selectedBilling = selected?.billing ?? null;
 
   const totalUnread = useMemo(`, 'board selected billing');
 
   source = replaceOnce(source,
-`    const handleKeyDown = (event: KeyboardEvent) => {
+    `    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setSelectedOrderId(null);
     };`,
-`    const handleKeyDown = (event: KeyboardEvent) => {
+    `    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (billingDetailsOpen) {
         setBillingDetailsOpen(false);
@@ -215,15 +215,15 @@ function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
     };`, 'board escape nested modal');
 
   source = replaceOnce(source,
-`  }, [selected]);`,
-`  }, [billingDetailsOpen, selected]);`, 'board escape deps');
+    `  }, [selected]);`,
+    `  }, [billingDetailsOpen, selected]);`, 'board escape deps');
 
   source = replaceOnce(source,
-`  const openOrder = (orderId: string) => {
+    `  const openOrder = (orderId: string) => {
     setActiveTab("order");
     setSelectedOrderId(orderId);
   };`,
-`  const closeOrderModal = () => {
+    `  const closeOrderModal = () => {
     setBillingDetailsOpen(false);
     setSelectedOrderId(null);
   };
@@ -236,27 +236,27 @@ function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
 
   source = source.replaceAll('setSelectedOrderId(null)', 'closeOrderModal()');
   source = source.replace(
-`  const closeOrderModal = () => {
+    `  const closeOrderModal = () => {
     setBillingDetailsOpen(false);
     closeOrderModal();
   };`,
-`  const closeOrderModal = () => {
+    `  const closeOrderModal = () => {
     setBillingDetailsOpen(false);
     setSelectedOrderId(null);
   };`);
   source = source.replace(
-`      closeOrderModal();
+    `      closeOrderModal();
     };`,
-`      setSelectedOrderId(null);
+    `      setSelectedOrderId(null);
     };`);
 
   source = replaceOnce(source,
-`                    </section>
+    `                    </section>
 
                     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex items-center gap-2">
                         {selected.order.fulfillment_type === "delivery" ?`,
-`                    </section>
+    `                    </section>
 
                     {selected.billing ? (
                       <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
@@ -270,7 +270,7 @@ function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
                               </div>
                             </div>
                           </div>
-                          <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${billingStatusTone(selected.billing.status)}`}>
+                          <span className={"rounded-full border px-2.5 py-1 text-xs font-black " + billingStatusTone(selected.billing.status)}>
                             {billingStatusLabel(selected.billing.status)}
                           </span>
                         </div>
@@ -290,11 +290,11 @@ function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
                         {selected.order.fulfillment_type === "delivery" ?`, 'board billing section');
 
   source = replaceOnce(source,
-`      ) : null}
+    `      ) : null}
     </>
   );
 }`,
-`      ) : null}
+    `      ) : null}
 
       {selectedBilling && billingDetailsOpen ? (
         <div
@@ -333,7 +333,7 @@ function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
             <div className="space-y-4 p-5">
               <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div className="text-sm font-bold text-slate-600">Estado</div>
-                <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${billingStatusTone(selectedBilling.status)}`}>
+                <span className={"rounded-full border px-2.5 py-1 text-xs font-black " + billingStatusTone(selectedBilling.status)}>
                   {billingStatusLabel(selectedBilling.status)}
                 </span>
               </div>
@@ -347,7 +347,7 @@ function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Identificación</div>
                   <div className="mt-1 text-sm font-bold text-slate-900">
                     {selectedBilling.document_type} {selectedBilling.document_number}
-                    {selectedBilling.verification_digit ? `-${selectedBilling.verification_digit}` : ""}
+                    {selectedBilling.verification_digit ? "-" + selectedBilling.verification_digit : ""}
                   </div>
                 </div>
                 <div>
@@ -387,7 +387,7 @@ function ActionIcon({ op }: { op: OpsAction }) {`, 'board billing helpers');
     </>
   );
 }`,
-'board billing details modal');
+    'board billing details modal');
 
   fs.writeFileSync(path, source);
 }
