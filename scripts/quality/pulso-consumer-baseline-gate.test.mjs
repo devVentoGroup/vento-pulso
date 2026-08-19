@@ -380,7 +380,7 @@ test('REG-02 cero tests jamás se normaliza a PASS', () => {
 
 test('REG-03 evidencia de otro consumidor jamás satisface PULSO', () => {
   const evidence = validEvidence();
-  evidence.consumer_repository = 'devVentoGroup/vento-origo';
+  evidence.consumer_repository = 'vento-group-sas/vento-origo';
   assert.ok(validateEvidence(evidence).includes('WRONG_CONSUMER_REPOSITORY'));
 });
 
